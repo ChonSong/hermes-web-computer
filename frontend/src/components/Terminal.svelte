@@ -2,6 +2,7 @@
   import { onMount } from "svelte"
   import { Terminal } from "@xterm/xterm"
   import { FitAddon } from "@xterm/addon-fit"
+  import { send } from "../stores/ws"
 
   let container: HTMLDivElement
 
@@ -24,9 +25,7 @@
     fitAddon.fit()
 
     term.onData((data) => {
-      // TODO: send to Go backend via WebSocket
-      // send({ protocol: "agent", method: "pty.write", params: { data } })
-      console.log("terminal input:", data)
+      send({ protocol: "agent", method: "pty.write", params: { data } })
     })
 
     term.writeln("Agent-OS v1.2 — Welcome")
