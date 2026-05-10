@@ -119,9 +119,20 @@ func (m *Multiplexer) Router() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
-	// Serve static frontend files
-	fs := http.FileServer(http.Dir("../frontend/dist"))
-	mux.Handle("/", fs)
+	// Serve static frontend files - try multiple paths
+	distPaths := []string{
+		"../frontend/dist",
+		"../../frontend/dist",
+		"/opt/data/hermes-web-computer/frontend/dist",
+	}
+	for _, distPath := range distPaths {
+		if _, err := os.Stat(distPath); err == nil {
+			log.Printf("serving static files from %s", distPath)
+			fs := http.FileServer(http.Dir(distPath))
+			mux.Handle("/", fs)
+			break
+		}
+	}
 	return mux
 }
 
