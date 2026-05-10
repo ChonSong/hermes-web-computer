@@ -22,6 +22,7 @@ type PTYSession struct {
 	Cmd     *exec.Cmd
 	PTTY    *os.File
 	RingBuf *RingBuffer // 1MB ring buffer for checkpoint
+	Output  chan []byte // Channel for forwarding PTY output to clients
 	mu      sync.Mutex
 }
 
@@ -82,10 +83,11 @@ func (s *Supervisor) Start(id string, cmd *exec.Cmd) (*PTYSession, error) {
 		Cmd:     cmd,
 		PTTY:    p,
 		RingBuf: NewRingBuffer(1024 * 1024), // 1MB
+		Output:  make(chan []byte, 64),
 	}
 	s.ptys[id] = session
 
-	// Start reading from PTY into ring buffer
+	// Start reading from PTY into ring buffer AND output channel
 	go func() {
 		buf := make([]byte, 4096)
 		for {
@@ -99,6 +101,14 @@ func (s *Supervisor) Start(id string, cmd *exec.Cmd) (*PTYSession, error) {
 			session.mu.Lock()
 			session.RingBuf.Write(buf[:n])
 			session.mu.Unlock()
+			// Forward to output channel (non-blocking)
+			data := make([]byte, n)
+			copy(data, buf[:n])
+			select {
+			case session.Output <- data:
+			default:
+				// Drop if channel full
+			}
 		}
 	}()
 

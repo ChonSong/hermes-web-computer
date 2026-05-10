@@ -202,13 +202,7 @@ func (m *Multiplexer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 }
 
 func (m *Multiplexer) forwardPTYOutput(sess *Session, ptySession *pty.PTYSession) {
-	buf := make([]byte, 4096)
-	for {
-		n, err := ptySession.PTTY.Read(buf)
-		if err != nil {
-			return
-		}
-		data := buf[:n]
+	for data := range ptySession.Output {
 		// Escape for JSON
 		escaped, _ := json.Marshal(string(data))
 		m.sendEvent(sess, Event{
@@ -376,21 +370,32 @@ func (m *Multiplexer) routeAgent(env Envelope, sess *Session, sessionID string) 
 			Data string `json:"data"`
 		}
 		if err := json.Unmarshal(env.Params, &params); err != nil {
+			log.Printf("pty.write unmarshal error: %v", err)
 			return
 		}
 
 		// Security check: classify the command
 		tier, err := m.enforcer.Classify(params.Data, "/agent/workspace")
 		if err != nil {
+			log.Printf("security classify error: %v", err)
 			m.sendEvent(sess, Event{Protocol: "agent", Event: "security.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
 			return
 		}
+
+		log.Printf("pty.write: tier=%s data=%q", tier, params.Data)
 
 		switch tier {
 		case "safe":
 			// Write directly
 			if ptyFile := m.supervisor.PTY(sess.ptyID); ptyFile != nil {
-				ptyFile.Write([]byte(params.Data))
+				n, err := ptyFile.Write([]byte(params.Data))
+				if err != nil {
+					log.Printf("pty write error: %v", err)
+				} else {
+					log.Printf("pty wrote %d bytes", n)
+				}
+			} else {
+				log.Printf("pty file not found for session %s", sess.ptyID)
 			}
 		case "prompt":
 			// Request approval

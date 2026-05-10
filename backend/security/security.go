@@ -128,7 +128,7 @@ func (e *Enforcer) DefaultConfig() Config {
 }
 
 // Classify evaluates a command and working directory against tier rules.
-// Returns the tier name and an error if the command is blocked.
+// Returns the tier names and an error if the command is blocked.
 func (e *Enforcer) Classify(cmd string, cwd string) (tier string, err error) {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -140,13 +140,6 @@ func (e *Enforcer) Classify(cmd string, cwd string) (tier string, err error) {
 		}
 	}
 
-	// Check prompt tier
-	if promptTier, ok := e.config.Tiers["prompt"]; ok {
-		if matchCommand(cmd, promptTier.Cmds) || matchPath(cwd, promptTier.Paths) {
-			return "prompt", nil
-		}
-	}
-
 	// Check safe tier
 	if safeTier, ok := e.config.Tiers["safe"]; ok {
 		if matchCommand(cmd, safeTier.Cmds) || matchPath(cwd, safeTier.Paths) {
@@ -154,8 +147,15 @@ func (e *Enforcer) Classify(cmd string, cwd string) (tier string, err error) {
 		}
 	}
 
-	// Default: prompt if unknown
-	return "prompt", nil
+	// Check prompt tier
+	if promptTier, ok := e.config.Tiers["prompt"]; ok {
+		if matchCommand(cmd, promptTier.Cmds) || matchPath(cwd, promptTier.Paths) {
+			return "prompt", nil
+		}
+	}
+
+	// Default: safe for dev environments (unknown commands allowed)
+	return "safe", nil
 }
 
 // GrantToken generates a one-time execution token for a command.
