@@ -126,3 +126,14 @@ func (s *Supervisor) Checkpoint(id string) ([]byte, error) {
 	defer session.mu.Unlock()
 	return session.RingBuf.ReadAll(), nil
 }
+
+// PTTY returns the PTY file descriptor for writing.
+func (s *Supervisor) PTY(id string) *os.File {
+	s.mu.RLock()
+	session, ok := s.ptys[id]
+	s.mu.RUnlock()
+	if !ok {
+		return nil
+	}
+	return session.PTTY
+}
