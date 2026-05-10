@@ -1,8 +1,7 @@
 <script lang="ts">
   import { send } from "../stores/ws"
-  import { onMount, createEventDispatcher } from "svelte"
 
-  export let visible: boolean = false
+  let { visible = $bindable(false) }: { visible?: boolean } = $props()
   let query = $state("")
   let selectedIndex = $state(0)
 
@@ -21,12 +20,12 @@
 </script>
 
 {#if visible}
-  <div class="fixed inset-0 bg-black/50 flex items-start justify-center pt-20 z-50" on:click|self={() => visible = false}>
+  <div class="fixed inset-0 bg-black/50 flex items-start justify-center pt-20 z-50" onclick={(e) => { if (e.target === e.currentTarget) visible = false }}>
     <div class="w-96 bg-gray-900 rounded-lg border border-gray-700 shadow-xl">
       <input bind:value={query} placeholder="Type a command..." class="w-full p-3 bg-transparent text-white outline-none border-b border-gray-700" autofocus />
       <ul class="max-h-60 overflow-y-auto">
         {#each filtered as cmd, i}
-          <li class="p-3 cursor-pointer hover:bg-gray-800" class:bg-gray-800={i === selectedIndex} on:click={() => { cmd.action(); visible = false }}>
+          <li class="p-3 cursor-pointer hover:bg-gray-800" class:bg-gray-800={i === selectedIndex} onclick={() => { cmd.action(); visible = false }}>
             {cmd.name}
           </li>
         {/each}

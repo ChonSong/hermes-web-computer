@@ -1,5 +1,5 @@
 <script lang="ts">
-  export let visible: boolean = false
+  let { visible = $bindable(false) }: { visible?: boolean } = $props()
 
   const shortcuts = [
     ["Shift+Space", "Universal interrupt", "Global"],
@@ -15,7 +15,7 @@
 </script>
 
 {#if visible}
-  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" on:click|self={() => visible = false}>
+  <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onclick={(e) => { if (e.target === e.currentTarget) visible = false }}>
     <div class="bg-gray-900 rounded-lg border border-gray-700 p-6 max-w-lg">
       <h2 class="text-lg text-white mb-4">Keyboard Shortcuts</h2>
       <table class="w-full text-sm">

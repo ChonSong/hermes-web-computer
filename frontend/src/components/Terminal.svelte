@@ -1,22 +1,18 @@
 <script lang="ts">
-  import { onMount, onDestroy } from "svelte"
+  import { onMount } from "svelte"
   import { Terminal } from "@xterm/xterm"
   import { FitAddon } from "@xterm/addon-fit"
   import { send, ptyOutputs } from "../stores/ws"
 
-  export let ptyId: string = ""
+  let { ptyId = "" }: { ptyId?: string } = $props()
 
-  let container: HTMLDivElement | undefined = $state()
-  let term: Terminal | undefined = $state()
-  let fitAddon: FitAddon | undefined = $state()
-  let resizeObserver: ResizeObserver | undefined = $state()
+  let container: HTMLDivElement
+  let term: Terminal
 
   let outputBuffer = $derived(ptyId ? ($ptyOutputs.get(ptyId) || "") : "")
   let lastLength = $state(0)
 
   onMount(() => {
-    if (!container) return
-
     term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
@@ -29,26 +25,28 @@
       },
     })
 
-    fitAddon = new FitAddon()
+    const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(container)
     fitAddon.fit()
 
-    // Terminal input → WS
-    term.onData((data: string) => {
+    term.onData((data) => {
       send({ protocol: "agent", method: "pty.write", params: { data } })
     })
 
-    resizeObserver = new ResizeObserver(() => fitAddon?.fit())
+    term.writeln("Agent-OS v1.2 — Welcome")
+    term.writeln("Shift+Space to interrupt")
+    term.writeln("")
+
+    const resizeObserver = new ResizeObserver(() => fitAddon.fit())
     resizeObserver.observe(container)
 
     return () => {
-      resizeObserver?.disconnect()
-      term?.dispose()
+      resizeObserver.disconnect()
+      term.dispose()
     }
   })
 
-  // Incremental PTY output rendering
   $effect(() => {
     if (term && outputBuffer.length > lastLength) {
       term.write(outputBuffer.slice(lastLength))

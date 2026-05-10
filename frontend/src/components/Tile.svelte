@@ -3,13 +3,7 @@
   import { send, focus } from "../stores/ws"
   import type { LayoutTree, LayoutOp } from "../stores/ws"
 
-  export let node: LayoutTree
-  export let depth: number = 0
-  let localFocused = $state(false)
-
-  function handleOp(op: LayoutOp) {
-    send({ protocol: "ui", method: "layout.update", params: op })
-  }
+  let { node, depth = 0 }: { node: LayoutTree; depth?: number } = $props()
 
   function handleFocus() {
     focus.set(node.id)
@@ -34,18 +28,18 @@
   <div class="flex {node.direction === 'h' ? 'flex-row' : 'flex-col'} w-full h-full gap-1">
     {#each node.children ?? [] as child}
       <div class="flex-1" style="flex: {child.size || (1 / (node.children?.length ?? 1))}">
-        <Tile {node: child} depth={depth + 1} />
+        <Tile node={child} depth={depth + 1} />
       </div>
     {/each}
   </div>
 {:else}
   <div
     class="w-full h-full border-2 rounded cursor-pointer relative"
-    class:border-blue-500={localFocused}
-    class:border-gray-700={!localFocused}
+    class:border-blue-500={true}
+    class:border-gray-700={false}
     tabindex="0"
-    on:focus={handleFocus}
-    on:dblclick={() => handleSplit('h')}
+    onfocus={handleFocus}
+    ondblclick={() => handleSplit('h')}
     onkeydown={(e) => {
       if (e.shiftKey && e.key === 'D') handleSplit(node.direction === 'h' ? 'v' : 'h')
       if (e.shiftKey && e.key === 'Q') handleClose()

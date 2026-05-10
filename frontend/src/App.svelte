@@ -4,7 +4,7 @@
   import KeymapOverlay from "./components/KeymapOverlay.svelte"
   import { ws, layout } from "./stores/ws"
 
-  $: connected = $ws.connected
+  let connected = $derived($ws.connected)
   let showPalette = $state(false)
   let showKeymap = $state(false)
 
