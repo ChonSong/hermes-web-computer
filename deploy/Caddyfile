@@ -1,0 +1,9 @@
+:443 {
+	root * /srv/frontend
+	file_server
+
+	reverse_proxy /ws agent-os:3001
+
+	encode gzip
+	tls internal
+}

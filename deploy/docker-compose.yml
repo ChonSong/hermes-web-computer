@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  agent-os:
+    build: ../backend
+    ports: ["3001:3001"]
+    networks: [agent-net]
+    volumes:
+      - ../state:/agent/.state
+    environment:
+      - LOG_LEVEL=info
+
+  caddy:
+    image: caddy:latest
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ../deploy/Caddyfile:/etc/caddy/Caddyfile
+      - ../frontend/dist:/srv/frontend
+    networks: [agent-net]
+
+networks:
+  agent-net:
+    driver: bridge
+    internal: true
