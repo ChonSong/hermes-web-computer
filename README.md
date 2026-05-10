@@ -53,9 +53,27 @@
 # Backend
 cd backend && go mod tidy && go run cmd/server/main.go
 
-# Frontend
+# Frontend (in another terminal)
 cd frontend && npm install && npm run dev
+
+# Or run both with make
+make dev
 ```
+
+## Current Status
+
+✅ **Working core** — All packages compile, build, and vet clean
+✅ **WebSocket multiplexer** — JSON-RPC routing (ui/agent/audio)
+✅ **PTY supervisor** — Ring buffer, checkpoint, signal handling
+✅ **Layout engine** — Split/mount/unmount/resize/swap/fullscreen ops
+✅ **Security enforcer** — Tiered YAML permissions, token-gated execution
+✅ **Telemetry** — JSONL ring buffer, async sync with backoff
+✅ **Audio bridge** — Fun-Audio-Chat binary protocol relay
+✅ **Svelte 5 SPA** — Recursive Tile, Terminal, CommandPalette, KeymapOverlay
+✅ **Docker Compose** — agent-os + hermes + fun-audio + caddy
+✅ **CI** — GitHub Actions (Go build/vet/test + Node build)
+
+🔄 **Next steps** — End-to-end integration testing, Monaco editor, LiteLLM integration
 
 ## Tech Stack
 
