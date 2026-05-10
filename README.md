@@ -64,7 +64,7 @@ make dev
 
 ✅ **Working core** — All packages compile, build, and vet clean
 ✅ **WebSocket multiplexer** — JSON-RPC routing (ui/agent/audio)
-✅ **PTY supervisor** — Ring buffer, checkpoint, signal handling
+✅ **PTY supervisor** — Ring buffer, checkpoint, signal handling, output channel
 ✅ **Layout engine** — Split/mount/unmount/resize/swap/fullscreen ops
 ✅ **Security enforcer** — Tiered YAML permissions, token-gated execution
 ✅ **Telemetry** — JSONL ring buffer, async sync with backoff
@@ -72,8 +72,22 @@ make dev
 ✅ **Svelte 5 SPA** — Recursive Tile, Terminal, CommandPalette, KeymapOverlay
 ✅ **Docker Compose** — agent-os + hermes + fun-audio + caddy
 ✅ **CI** — GitHub Actions (Go build/vet/test + Node build)
+✅ **E2E test** — WebSocket connect → layout initial → PTY echo → interrupt → checkpoint
 
-🔄 **Next steps** — End-to-end integration testing, Monaco editor, LiteLLM integration
+### E2E Test Results
+```
+1. Connected
+2. Layout received
+3. Sending echo...
+4. PTY: "echo HELLO_TEST"
+5. Echo confirmed!
+4. PTY: "HELLO_TEST\r\n"
+5. Echo confirmed!
+6. Interrupt: {"policy":"B","checkpoint_size":235}
+=== ALL TESTS PASSED ===
+```
+
+🔄 **Next steps** — Monaco editor integration, LiteLLM adapter, multi-user support
 
 ## Tech Stack
 
