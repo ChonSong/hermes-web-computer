@@ -1,7 +1,10 @@
 node_modules/
-dist/
+frontend/dist/
 state/
+telemetry/
 *.exe
 *.test
 state.db
 *.log
+backend/go.sum
+frontend/package-lock.json
