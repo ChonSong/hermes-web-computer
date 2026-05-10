@@ -48,6 +48,45 @@ func NewEnforcer() *Enforcer {
 	return e
 }
 
+// UseDefaults resets the enforcer to its default safe configuration.
+func (e *Enforcer) UseDefaults() {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.config = e.DefaultConfig()
+}
+
+// ValidateAndConsume checks if a token is valid (ignoring command match for approval flow).
+func (e *Enforcer) ValidateAndConsume(token string) bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+
+	t, ok := e.tokens[token]
+	if !ok {
+		return false
+	}
+
+	// Check expiry
+	if time.Now().After(t.ExpiresAt) {
+		delete(e.tokens, token)
+		return false
+	}
+
+	// Token is valid — consume it (single-use)
+	delete(e.tokens, token)
+	return true
+}
+
+// GetTokenCommand retrieves the command associated with a token.
+func (e *Enforcer) GetTokenCommand(token string) string {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	t, ok := e.tokens[token]
+	if !ok {
+		return ""
+	}
+	return t.Command
+}
+
 // LoadConfig reads and parses a YAML configuration file.
 func (e *Enforcer) LoadConfig(path string) error {
 	data, err := os.ReadFile(path)

@@ -12,8 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"hermes-web-computer/backend/audio"
+	"hermes-web-computer/backend/layout"
 	"hermes-web-computer/backend/pty"
+	"hermes-web-computer/backend/security"
 	"hermes-web-computer/backend/state"
+	"hermes-web-computer/backend/telemetry"
 
 	"nhooyr.io/websocket"
 )
@@ -41,6 +45,11 @@ type Multiplexer struct {
 	sessions   map[string]*Session
 	supervisor *pty.Supervisor
 	state      *state.SessionState
+	layout     *layout.LayoutTree
+	enforcer   *security.Enforcer
+	telemetry  *telemetry.RingBuffer
+	syncer     *telemetry.Syncer
+	audio      *audio.Bridge
 }
 
 // Session represents a single WebSocket connection.
@@ -53,7 +62,7 @@ type Session struct {
 }
 
 func NewMultiplexer() *Multiplexer {
-	return &Multiplexer{
+	m := &Multiplexer{
 		sessions:   make(map[string]*Session),
 		supervisor: pty.NewSupervisor(),
 		state: &state.SessionState{
@@ -66,7 +75,41 @@ func NewMultiplexer() *Multiplexer {
 			AgentState:   "idle",
 			ResumePolicy: "B",
 		},
+		layout:   layout.NewRoot("welcome"),
+		enforcer: security.NewEnforcer(),
 	}
+	// Load security config (use defaults if file not found)
+	homeDir, _ := os.UserHomeDir()
+	if err := m.enforcer.LoadConfig(homeDir + "/.agent-os/security.yaml"); err != nil {
+		m.enforcer.UseDefaults()
+	}
+	// Init telemetry
+	tb, err := telemetry.NewRingBuffer("/agent/.telemetry/events.jsonl", 100)
+	if err == nil {
+		m.telemetry = tb
+		m.syncer = telemetry.NewSyncer(tb, "")
+	}
+	return m
+}
+
+// SetAudioBridge attaches the audio bridge to the multiplexer.
+func (m *Multiplexer) SetAudioBridge(bridge *audio.Bridge) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.audio = bridge
+	// Connect in background
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := bridge.Connect(ctx); err != nil {
+			log.Printf("audio bridge connect error: %v", err)
+		}
+	}()
+}
+
+// GetTelemetrySyncer returns the telemetry syncer for manual start.
+func (m *Multiplexer) GetTelemetrySyncer() *telemetry.Syncer {
+	return m.syncer
 }
 
 func (m *Multiplexer) Router() http.Handler {
@@ -134,8 +177,13 @@ func (m *Multiplexer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Data:     json.RawMessage(fmt.Sprintf(`{"layout_version":1,"tree":{"id":"root","type":"leaf","content":"xterm","pty_id":"%s"}}`, ptyID)),
 	})
 
+	// Telemetry: session connected
+	if m.telemetry != nil {
+		m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "session.connected"})
+	}
+
 	ctx := context.Background()
-	go sess.readLoop(ctx, m)
+	go sess.readLoop(ctx, m, sessionID)
 	sess.writeLoop(ctx)
 
 	<-sess.done
@@ -164,7 +212,7 @@ func (m *Multiplexer) sendEvent(sess *Session, event Event) {
 	sess.Send(event)
 }
 
-func (s *Session) readLoop(ctx context.Context, m *Multiplexer) {
+func (s *Session) readLoop(ctx context.Context, m *Multiplexer, sessionID string) {
 	defer close(s.done)
 	for {
 		_, msg, err := s.ws.Read(ctx)
@@ -183,7 +231,7 @@ func (s *Session) readLoop(ctx context.Context, m *Multiplexer) {
 		}
 
 		env.Ts = time.Now().UnixMilli()
-		m.route(env, s)
+		m.route(env, s, sessionID)
 	}
 }
 
@@ -218,20 +266,25 @@ func (s *Session) Send(event Event) {
 	}
 }
 
-func (m *Multiplexer) route(env Envelope, sess *Session) {
+func mustMarshal(v interface{}) []byte {
+	b, _ := json.Marshal(v)
+	return b
+}
+
+func (m *Multiplexer) route(env Envelope, sess *Session, sessionID string) {
 	log.Printf("routing: protocol=%s method=%s id=%s", env.Protocol, env.Method, env.ID)
 
 	switch env.Protocol {
 	case "ui":
-		m.routeUI(env, sess)
+		m.routeUI(env, sess, sessionID)
 	case "agent":
-		m.routeAgent(env, sess)
+		m.routeAgent(env, sess, sessionID)
 	case "audio":
-		m.routeAudio(env, sess)
+		m.routeAudio(env, sess, sessionID)
 	}
 }
 
-func (m *Multiplexer) routeUI(env Envelope, sess *Session) {
+func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 	switch env.Method {
 	case "interrupt":
 		// Handle Shift+Space interrupt
@@ -254,32 +307,99 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session) {
 				Data:     json.RawMessage(fmt.Sprintf(`{"policy":"%s","checkpoint_size":%d}`, m.state.ResumePolicy, len(buf))),
 			})
 			log.Printf("interrupt handled for session %s", sess.ptyID)
+
+			// Telemetry
+			if m.telemetry != nil {
+				m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "interrupt"})
+			}
 		}
 
 	case "layout.update":
-		// TODO: handle layout mutations
-		log.Printf("layout.update: %s", string(env.Params))
+		var op layout.Op
+		if err := json.Unmarshal(env.Params, &op); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		delta, err := m.layout.Apply(op)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.state.LayoutVersion++
+		// Send delta to client
+		m.sendEvent(sess, Event{
+			Protocol: "ui",
+			Event:    "layout.delta",
+			Data:     json.RawMessage(fmt.Sprintf(`{"layout_version":%d,"ops":%s}`, m.state.LayoutVersion, mustMarshal(delta))),
+		})
+		// Telemetry
+		if m.telemetry != nil {
+			m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "layout.update", Command: op.Op})
+		}
 
 	case "approval.grant":
-		// TODO: handle approval token
-		log.Printf("approval.grant: %s", string(env.Params))
+		var params struct {
+			Token string `json:"token"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			return
+		}
+		if m.enforcer.ValidateAndConsume(params.Token) {
+			// Execute the approved command
+			cmd := m.enforcer.GetTokenCommand(params.Token)
+			if ptyFile := m.supervisor.PTY(sess.ptyID); ptyFile != nil {
+				ptyFile.Write([]byte(cmd))
+			}
+			m.sendEvent(sess, Event{Protocol: "ui", Event: "approval.granted"})
+			if m.telemetry != nil {
+				m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "approval.granted", Token: params.Token})
+			}
+		}
 	}
 }
 
-func (m *Multiplexer) routeAgent(env Envelope, sess *Session) {
+func (m *Multiplexer) routeAgent(env Envelope, sess *Session, sessionID string) {
 	switch env.Method {
 	case "pty.write":
-		// Forward terminal input to PTY
-		if sess.ptyID != "" {
-			var params struct {
-				Data string `json:"data"`
+		var params struct {
+			Data string `json:"data"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			return
+		}
+
+		// Security check: classify the command
+		tier, err := m.enforcer.Classify(params.Data, "/agent/workspace")
+		if err != nil {
+			m.sendEvent(sess, Event{Protocol: "agent", Event: "security.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+
+		switch tier {
+		case "safe":
+			// Write directly
+			if ptyFile := m.supervisor.PTY(sess.ptyID); ptyFile != nil {
+				ptyFile.Write([]byte(params.Data))
 			}
-			if err := json.Unmarshal(env.Params, &params); err == nil {
-				_, err := m.supervisor.PTY(sess.ptyID).Write([]byte(params.Data))
-				if err != nil {
-					log.Printf("pty write error: %v", err)
-				}
+		case "prompt":
+			// Request approval
+			token, expiry := m.enforcer.GrantToken(params.Data)
+			m.sendEvent(sess, Event{
+				Protocol: "ui", Event: "approval.required",
+				Data: json.RawMessage(fmt.Sprintf(`{"command":"%s","token":"%s","expires_at":%d}`, params.Data, token, expiry.Unix())),
+			})
+		case "block":
+			m.sendEvent(sess, Event{Protocol: "ui", Event: "command.blocked", Data: json.RawMessage(fmt.Sprintf(`{"command":"%s"}`, params.Data))})
+			// Red border
+			m.sendEvent(sess, Event{Protocol: "ui", Event: "border.state", Data: json.RawMessage(`{"color":"red","state":"blocked"}`)})
+		}
+
+		if m.telemetry != nil {
+			trunc := params.Data
+			if len(trunc) > 100 {
+				trunc = trunc[:100]
 			}
+			m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "pty.write", Command: trunc})
 		}
 
 	case "tool.execute":
@@ -292,7 +412,43 @@ func (m *Multiplexer) routeAgent(env Envelope, sess *Session) {
 	}
 }
 
-func (m *Multiplexer) routeAudio(env Envelope, sess *Session) {
-	// TODO: relay to Fun-Audio-Chat bridge
-	log.Printf("audio: %s", env.Method)
+func (m *Multiplexer) routeAudio(env Envelope, sess *Session, sessionID string) {
+	switch env.Method {
+	case "audio.stream":
+		var params struct {
+			OpusChunk []byte `json:"opus_chunk"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			return
+		}
+		if m.audio != nil {
+			resp, err := m.audio.RelayAudio(sessionID, params.OpusChunk)
+			if err != nil {
+				m.sendEvent(sess, Event{Protocol: "audio", Event: "error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+				return
+			}
+			// Relay response back to client
+			m.sendEvent(sess, Event{Protocol: "audio", Event: "response", Data: json.RawMessage(fmt.Sprintf(`{"data":%s}`, mustMarshal(string(resp))))})
+		}
+
+	case "audio.interrupt":
+		if m.audio != nil {
+			if err := m.audio.Interrupt(sessionID); err != nil {
+				log.Printf("audio interrupt error: %v", err)
+			}
+		}
+
+	case "audio.text":
+		var params struct {
+			Text string `json:"text"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			return
+		}
+		if m.audio != nil {
+			if err := m.audio.SendText(sessionID, params.Text); err != nil {
+				log.Printf("audio send text error: %v", err)
+			}
+		}
+	}
 }

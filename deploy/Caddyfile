@@ -1,9 +1,15 @@
 :443 {
-	root * /srv/frontend
-	file_server
+    root * /srv/frontend
+    file_server
 
-	reverse_proxy /ws agent-os:3001
+    reverse_proxy /ws agent-os:3001
 
-	encode gzip
-	tls internal
+    encode gzip
+    tls internal
+
+    header {
+        X-Frame-Options DENY
+        X-Content-Type-Options nosniff
+        Referrer-Policy strict-origin-when-cross-origin
+    }
 }

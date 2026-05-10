@@ -7,14 +7,37 @@ services:
     networks: [agent-net]
     volumes:
       - ../state:/agent/.state
+      - ../telemetry:/agent/.telemetry
     environment:
       - LOG_LEVEL=info
+      - FUN_AUDIO_WS=ws://fun-audio:11235/api/chat
+      - TELEMETRY_ENDPOINT=${TELEMETRY_ENDPOINT:-}
+    depends_on: [fun-audio]
+
+  hermes:
+    image: nousresearch/hermes-agent:latest
+    network_mode: host
+    volumes:
+      - /host/project:/host/project:ro
+      - ../state:/opt/data
+
+  fun-audio:
+    build: ../bridge
+    network_mode: host
+    volumes: ["../state:/opt/data"]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
 
   caddy:
     image: caddy:latest
     ports: ["80:80", "443:443"]
     volumes:
-      - ../deploy/Caddyfile:/etc/caddy/Caddyfile
+      - ./Caddyfile:/etc/caddy/Caddyfile
       - ../frontend/dist:/srv/frontend
     networks: [agent-net]
 

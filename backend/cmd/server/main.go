@@ -9,6 +9,7 @@ import (
 	"syscall"
 	"time"
 
+	"hermes-web-computer/backend/audio"
 	"hermes-web-computer/backend/ws"
 )
 
@@ -18,7 +19,20 @@ func main() {
 		port = "3001"
 	}
 
+	audioURL := os.Getenv("FUN_AUDIO_WS")
+	if audioURL == "" {
+		audioURL = "ws://localhost:11235/api/chat"
+	}
+
 	mux := ws.NewMultiplexer()
+	mux.SetAudioBridge(audio.NewBridge(audioURL))
+
+	// Start telemetry sync if endpoint configured
+	if endpoint := os.Getenv("TELEMETRY_ENDPOINT"); endpoint != "" {
+		if syncer := mux.GetTelemetrySyncer(); syncer != nil {
+			go syncer.Start()
+		}
+	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
