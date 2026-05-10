@@ -119,11 +119,11 @@ func (m *Multiplexer) Router() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
-	// Serve static frontend files - try multiple paths
+	// Serve static frontend files - check absolute path first to avoid stale dist dirs
 	distPaths := []string{
+		"/opt/data/hermes-web-computer/frontend/dist",
 		"../frontend/dist",
 		"../../frontend/dist",
-		"/opt/data/hermes-web-computer/frontend/dist",
 	}
 	for _, distPath := range distPaths {
 		if _, err := os.Stat(distPath); err == nil {
