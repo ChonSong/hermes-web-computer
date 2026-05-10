@@ -12,7 +12,7 @@ import (
 
 // Supervisor manages PTY processes with ring buffer and checkpoint support.
 type Supervisor struct {
-	mu   sync.Mutex
+	mu   sync.RWMutex
 	ptys map[string]*PTYSession
 }
 

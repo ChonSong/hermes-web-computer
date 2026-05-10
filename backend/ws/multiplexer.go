@@ -134,7 +134,7 @@ func (m *Multiplexer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Data:     json.RawMessage(fmt.Sprintf(`{"layout_version":1,"tree":{"id":"root","type":"leaf","content":"xterm","pty_id":"%s"}}`, ptyID)),
 	})
 
-	ctx := conn.ReadLimitContext(context.Background())
+	ctx := context.Background()
 	go sess.readLoop(ctx, m)
 	sess.writeLoop(ctx)
 
@@ -275,7 +275,7 @@ func (m *Multiplexer) routeAgent(env Envelope, sess *Session) {
 				Data string `json:"data"`
 			}
 			if err := json.Unmarshal(env.Params, &params); err == nil {
-				_, err := m.supervisor.PTTY(sess.ptyID).Write([]byte(params.Data))
+				_, err := m.supervisor.PTY(sess.ptyID).Write([]byte(params.Data))
 				if err != nil {
 					log.Printf("pty write error: %v", err)
 				}

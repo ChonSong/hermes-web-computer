@@ -17,12 +17,22 @@ export interface Event {
 
 export interface LayoutTree {
   id: string
-  type: string
-  content?: string
-  direction?: string
+  type: "leaf" | "split"
+  content?: "xterm" | "monaco" | "welcome"
+  direction?: "h" | "v"
   children?: LayoutTree[]
   path?: string
   pty_id?: string
+  size?: number
+}
+
+export interface LayoutOp {
+  op: string  // "split", "mount", "unmount", "resize", "swap", "fullscreen"
+  target_id: string
+  direction?: string
+  content?: string
+  pty_id?: string
+  size?: number
 }
 
 export const ws = writable<{ connected: boolean; lastError: string | null }>({
@@ -34,6 +44,12 @@ export const layout = writable<{ tree: LayoutTree | null; version: number }>({
   tree: null,
   version: 0,
 })
+
+// Focus tracking — which tile ID is currently focused
+export const focus = writable<string>("root")
+
+// PTY output routing — map from pty_id to output data
+export const ptyOutputs = writable<Map<string, string>>(new Map())
 
 let socket: WebSocket | null = null
 const handlers: Map<string, (data: unknown) => void> = new Map()
@@ -53,16 +69,32 @@ export function connect(url: string = "ws://localhost:3001/ws") {
   }
 
   socket.onmessage = (ev) => {
-    const event: Event = JSON.parse(ev.data)
-    if (event.event === "layout.initial" || event.event === "layout.delta") {
-      layout.update((l) => ({
-        ...l,
-        tree: event.data?.tree as LayoutTree,
-        version: (event.data?.layout_version as number) || l.version + 1,
-      }))
+    try {
+      const event: Event = JSON.parse(ev.data)
+      if (event.event === "layout.initial" || event.event === "layout.delta") {
+        layout.update((l) => ({
+          ...l,
+          tree: event.data?.tree as LayoutTree,
+          version: (event.data?.layout_version as number) || l.version + 1,
+        }))
+      }
+      // Route PTY output to the store
+      if (event.protocol === "agent" && event.event === "pty.output") {
+        const ptyData = event.data as { pty_id: string; data: string } | undefined
+        if (ptyData?.pty_id) {
+          ptyOutputs.update((map) => {
+            const next = new Map(map)
+            const existing = next.get(ptyData.pty_id) || ""
+            next.set(ptyData.pty_id, existing + ptyData.data)
+            return next
+          })
+        }
+      }
+      const handler = handlers.get(event.event)
+      if (handler) handler(event.data)
+    } catch (e) {
+      console.error("WS message parse error:", e)
     }
-    const handler = handlers.get(event.event)
-    if (handler) handler(event.data)
   }
 
   socket.onclose = () => {
@@ -82,6 +114,31 @@ export function send(env: Omit<Envelope, "id" | "ts">): string {
   return id
 }
 
+/** Send a layout mutation operation to the backend */
+export function sendOp(op: LayoutOp): string {
+  return send({
+    protocol: "ui",
+    method: "layout.op",
+    params: {
+      op: op.op,
+      target_id: op.target_id,
+      direction: op.direction,
+      content: op.content,
+      pty_id: op.pty_id,
+      size: op.size,
+    },
+  })
+}
+
+/** Send a full layout tree update (after client-side mutations) */
+export function sendLayoutUpdate(tree: LayoutTree): string {
+  return send({
+    protocol: "ui",
+    method: "layout.update",
+    params: { tree },
+  })
+}
+
 export function on(event: string, handler: (data: unknown) => void): () => void {
   handlers.set(event, handler)
   return () => handlers.delete(event)
@@ -94,7 +151,6 @@ globalThis.addEventListener(
     if (e.shiftKey && e.key === " " && !e.isComposing) {
       e.preventDefault()
       send({ protocol: "ui", method: "interrupt" })
-      // TODO: render amber border optimistically
     }
   },
   true
