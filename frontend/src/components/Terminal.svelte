@@ -5,10 +5,8 @@
   import { send, ptyOutputs } from "../stores/ws"
 
   let { ptyId = "" }: { ptyId?: string } = $props()
-
   let container: HTMLDivElement
   let term: Terminal
-
   let outputBuffer = $derived(ptyId ? ($ptyOutputs.get(ptyId) || "") : "")
   let lastLength = $state(0)
 
@@ -16,35 +14,26 @@
     term = new Terminal({
       cursorBlink: true,
       fontSize: 14,
-      fontFamily: "'JetBrains Mono', 'Fira Code', monospace",
+      fontFamily: "monospace",
       theme: {
         background: "#0a0a0a",
         foreground: "#e0e0e0",
         cursor: "#60a5fa",
-        selectionBackground: "#334155",
       },
     })
-
     const fitAddon = new FitAddon()
     term.loadAddon(fitAddon)
     term.open(container)
     fitAddon.fit()
-
     term.onData((data) => {
       send({ protocol: "agent", method: "pty.write", params: { data } })
     })
-
-    term.writeln("Agent-OS v1.2 — Welcome")
+    term.writeln("Agent-OS v1.2")
     term.writeln("Shift+Space to interrupt")
     term.writeln("")
-
-    const resizeObserver = new ResizeObserver(() => fitAddon.fit())
-    resizeObserver.observe(container)
-
-    return () => {
-      resizeObserver.disconnect()
-      term.dispose()
-    }
+    const ro = new ResizeObserver(() => fitAddon.fit())
+    ro.observe(container)
+    return () => { ro.disconnect(); term.dispose() }
   })
 
   $effect(() => {
@@ -55,4 +44,4 @@
   })
 </script>
 
-<div bind:this={container} class="w-full h-full"></div>
+<div bind:this={container} style="width: 100%; height: 100%;"></div>

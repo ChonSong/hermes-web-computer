@@ -8,7 +8,6 @@
   let showPalette = $state(false)
   let showKeymap = $state(false)
 
-  // Global keyboard shortcuts
   globalThis.addEventListener("keydown", (e: KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === "k") { e.preventDefault(); showPalette = !showPalette }
     if ((e.ctrlKey || e.metaKey) && e.key === "?") { e.preventDefault(); showKeymap = !showKeymap }
@@ -16,20 +15,20 @@
   }, true)
 </script>
 
-<div class="h-screen w-screen bg-gray-950 text-gray-100 flex flex-col border-2 border-blue-500">
+<div class="fixed inset-0 bg-gray-950 text-gray-100 flex flex-col">
   {#if connected}
     <div class="flex-1 p-1">
       {#if $layout.tree}
         <Tile node={$layout.tree} />
       {:else}
         <div class="flex items-center justify-center h-full text-gray-500">
-          <p>Connecting to layout server...</p>
+          <p>Connecting...</p>
         </div>
       {/if}
     </div>
   {:else}
     <div class="flex items-center justify-center h-full">
-      <p class="text-gray-500">Disconnected — reconnecting...</p>
+      <p class="text-gray-500">Disconnected</p>
     </div>
   {/if}
 </div>
