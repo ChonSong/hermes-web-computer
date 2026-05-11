@@ -52,7 +52,7 @@
       {#each appTypes as app}
         <div
           class="flex items-center justify-between p-3 rounded-lg bg-gray-800 border border-gray-700 {app.hoverBg} transition-colors cursor-pointer"
-          on:click={() => handleLaunch(app.type)}
+          onclick={() => handleLaunch(app.type)}
         >
           <div class="flex items-center gap-3">
             <span class="text-lg">{app.icon}</span>

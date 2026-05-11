@@ -122,7 +122,7 @@
     <div class="flex gap-0.5">
       {#each ["all", "tool_call", "task_complete", "delegation"] as t}
         <button
-          on:click={() => filter = t as any}
+          onclick={() => filter = t as any}
           class="text-[10px] px-2 py-0.5 rounded-full transition-colors {
             filter === t
               ? 'bg-gray-800 text-gray-200'

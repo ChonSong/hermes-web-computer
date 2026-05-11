@@ -234,9 +234,10 @@
       <!-- Voice record button -->
       {#if !isRecording}
         <button
-          on:click={startRecording}
+          onclick={startRecording}
           class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors
                  bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-red-400"
+          aria-label="Start recording"
           title="Start recording"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -247,9 +248,10 @@
         </button>
       {:else}
         <button
-          on:click={stopRecording}
+          onclick={stopRecording}
           class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors
                  bg-red-900 text-red-400 hover:bg-red-800 animate-pulse"
+          aria-label="Stop recording"
           title="Stop recording"
         >
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
@@ -269,7 +271,7 @@
       <input
         type="text"
         bind:value={input}
-        on:keydown={handleKeydown}
+        onkeydown={handleKeydown}
         placeholder="Type a message..."
         class="flex-1 bg-gray-800 text-gray-200 rounded-lg px-3 py-2 text-sm
                placeholder-gray-500 border border-gray-700
@@ -278,10 +280,11 @@
 
       <!-- Send button -->
       <button
-        on:click={send}
+        onclick={send}
         class="flex-shrink-0 w-9 h-9 rounded-lg bg-blue-600 hover:bg-blue-500
                text-white flex items-center justify-center transition-colors
                disabled:opacity-40 disabled:cursor-not-allowed"
+        aria-label="Send message"
         disabled={!input.trim()}
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

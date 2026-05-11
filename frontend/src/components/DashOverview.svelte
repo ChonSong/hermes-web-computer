@@ -173,7 +173,7 @@
       <h2 class="text-sm font-bold text-gray-200">Dashboard</h2>
     </div>
     <button
-      on:click={loadData}
+      onclick={loadData}
       disabled={loading}
       class="px-3 py-1 rounded-lg text-xs font-medium border border-gray-700 transition-colors flex items-center gap-1.5 text-gray-400 hover:text-gray-200 hover:border-gray-600 disabled:opacity-50"
     >

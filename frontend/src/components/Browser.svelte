@@ -124,21 +124,24 @@
   <div class="flex items-center gap-1 p-1.5 bg-gray-900 border-b border-gray-700">
     <button
       class="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors text-sm"
-      on:click={goBack}
+      onclick={goBack}
+      aria-label="Back"
       title="Back"
     >
       ◀
     </button>
     <button
       class="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors text-sm"
-      on:click={goForward}
+      onclick={goForward}
+      aria-label="Forward"
       title="Forward"
     >
       ▶
     </button>
     <button
       class="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors text-sm"
-      on:click={refresh}
+      onclick={refresh}
+      aria-label="Refresh"
       title="Refresh"
     >
       ↻
@@ -148,11 +151,11 @@
       bind:value={urlInput}
       class="flex-1 px-3 py-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-200 focus:outline-none focus:border-blue-500"
       placeholder="Enter URL..."
-      on:keydown={(e) => { if (e.key === "Enter") handleUrlSubmit() }}
+      onkeydown={(e) => { if (e.key === "Enter") handleUrlSubmit() }}
     />
     <button
       class="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
-      on:click={handleUrlSubmit}
+      onclick={handleUrlSubmit}
     >
       Go
     </button>
@@ -180,7 +183,7 @@
         src="data:image/png;base64,{screenshot}"
         alt="Browser screenshot"
         class="w-full h-full object-contain cursor-pointer"
-        on:click={handleImageClick}
+        onclick={handleImageClick}
       />
     {:else if !loading}
       <div class="flex items-center justify-center h-full text-gray-500">

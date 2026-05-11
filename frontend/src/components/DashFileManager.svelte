@@ -184,7 +184,7 @@
         {#each breadcrumbParts() as part, i}
           {#if i > 0}<span class="text-gray-700">/</span>{/if}
           <button
-            on:click={() => navigate("/" + breadcrumbParts().slice(0, i + 1).join("/"))}
+            onclick={() => navigate("/" + breadcrumbParts().slice(0, i + 1).join("/"))}
             class="hover:text-gray-300 transition-colors {i === breadcrumbParts().length - 1 ? 'text-gray-300 font-medium' : ''}"
           >{part}</button>
         {/each}
@@ -192,21 +192,21 @@
     </div>
     <div class="flex items-center gap-1.5 ml-3 shrink-0">
       <button
-        on:click={() => { showNewFile = true; newName = ""; newError = "" }}
+        onclick={() => { showNewFile = true; newName = ""; newError = "" }}
         class="flex items-center gap-1 px-2.5 py-1 bg-blue-600 hover:bg-blue-500 rounded text-[10px] font-medium text-white transition-colors"
       >
         <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
         New
       </button>
       <button
-        on:click={navigateUp}
+        onclick={navigateUp}
         class="p-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-gray-200 transition-all"
         title="Go up"
       >
         <svg class="w-3.5 h-3.5 rotate-180" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </button>
       <button
-        on:click={() => load(cwd)}
+        onclick={() => load(cwd)}
         class="flex items-center gap-1 px-2.5 py-1 bg-gray-800 hover:bg-gray-700 border border-gray-700 rounded text-[10px] text-gray-400 transition-all"
       >
         <svg class="w-3 h-3 {loading ? 'animate-spin' : ''}" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
@@ -225,7 +225,7 @@
       {:else if error}
         <div class="flex flex-col items-center justify-center h-full gap-2">
           <p class="text-[10px] text-red-400">{error}</p>
-          <button on:click={() => load(cwd)} class="text-[10px] text-gray-500 hover:text-gray-300">Retry</button>
+          <button onclick={() => load(cwd)} class="text-[10px] text-gray-500 hover:text-gray-300">Retry</button>
         </div>
       {:else if entries.length === 0 && !loading}
         <div class="flex flex-col items-center justify-center h-full gap-2 text-gray-500">
@@ -240,7 +240,7 @@
             >
               <div
                 class="flex-1 flex items-center gap-2 min-w-0"
-                on:click={() => entry.type === "dir"
+                onclick={() => entry.type === "dir"
                   ? navigate(cwd === "/" ? `/${entry.name}` : `${cwd}/${entry.name}`)
                   : openFile(entry.name)
                 }
@@ -260,7 +260,8 @@
               </span>
               {#if entry.type === "file"}
                 <button
-                  on:click|stopPropagation={(e) => {
+                  onclick={(e) => {
+                    e.stopPropagation()
                     const fullPath = cwd === "/" ? entry.name : `${cwd}/${entry.name}`
                     deleteTarget = { name: entry.name, path: fullPath, type: "file" }
                   }}
@@ -292,11 +293,11 @@
           <div class="flex items-center gap-0.5 shrink-0">
             {#if !editing}
               <button
-                on:click={() => { editing = true; editDirty = false }}
+                onclick={() => { editing = true; editDirty = false }}
                 class="px-1.5 py-0.5 rounded text-[9px] text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
               >Edit</button>
               <button
-                on:click={() => {
+                onclick={() => {
                   const fullPath = cwd === "/" ? selected! : `${cwd}/${selected}`
                   deleteTarget = { name: selected!, path: fullPath, type: "file" }
                 }}
@@ -307,11 +308,11 @@
               </button>
             {:else}
               <button
-                on:click={() => { editing = false; editContent = preview?.content ?? ""; editDirty = false }}
+                onclick={() => { editing = false; editContent = preview?.content ?? ""; editDirty = false }}
                 class="px-1.5 py-0.5 rounded text-[9px] text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
               >Cancel</button>
               <button
-                on:click={handleSave}
+                onclick={handleSave}
                 disabled={saving || !editDirty}
                 class="flex items-center gap-0.5 px-2 py-0.5 rounded text-[9px] font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors disabled:opacity-40"
               >
@@ -324,7 +325,7 @@
               </button>
             {/if}
             <button
-              on:click={() => { preview = null; selected = null; editing = false }}
+              onclick={() => { preview = null; selected = null; editing = false }}
               class="ml-0.5 p-1 rounded text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors"
             >
               <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
@@ -337,7 +338,7 @@
           {#if editing}
             <textarea
               bind:value={editContent}
-              on:input={(e) => { editDirty = (e.target as HTMLTextAreaElement).value !== preview?.content }}
+              oninput={(e) => { editDirty = (e.target as HTMLTextAreaElement).value !== preview?.content }}
               class="w-full h-full min-h-48 resize-none rounded bg-gray-900 border border-gray-700 text-[10px] text-gray-200 font-mono leading-relaxed p-2 focus:outline-none focus:border-blue-500"
               spellcheck={false}
             />
@@ -358,14 +359,14 @@
 
   
   {#if showNewFile}
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" on:click|self={() => { showNewFile = false }}>
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick={(e) => { if (e.target === e.currentTarget) showNewFile = false }}>
       <div class="w-80 rounded-lg border border-gray-700 bg-gray-900 shadow-2xl">
         <div class="flex items-center justify-between px-4 py-3 border-b border-gray-700">
           <div class="flex items-center gap-1.5">
             <svg class="w-3.5 h-3.5 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
             <span class="text-[10px] font-medium text-gray-200">New File</span>
           </div>
-          <button on:click={() => showNewFile = false} class="text-gray-500 hover:text-gray-300">
+          <button onclick={() => showNewFile = false} class="text-gray-500 hover:text-gray-300">
             <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
           </button>
         </div>
@@ -376,14 +377,14 @@
           </div>
           <input
             bind:value={newName}
-            on:keydown={(e) => { if (e.key === "Enter") handleCreateFile() }}
+            onkeydown={(e) => { if (e.key === "Enter") handleCreateFile() }}
             placeholder="filename.txt"
             class="w-full px-2.5 py-1.5 rounded bg-gray-800 border border-gray-700 text-[10px] text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-500"
           />
           {#if newError}<p class="text-[9px] text-red-400">{newError}</p>{/if}
           <div class="flex justify-end gap-1.5">
-            <button on:click={() => showNewFile = false} class="px-3 py-1 rounded text-[9px] text-gray-500 hover:text-gray-200 transition-colors">Cancel</button>
-            <button on:click={handleCreateFile} class="flex items-center gap-1 px-3 py-1 rounded text-[9px] font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors">
+            <button onclick={() => showNewFile = false} class="px-3 py-1 rounded text-[9px] text-gray-500 hover:text-gray-200 transition-colors">Cancel</button>
+            <button onclick={handleCreateFile} class="flex items-center gap-1 px-3 py-1 rounded text-[9px] font-medium bg-blue-600 hover:bg-blue-500 text-white transition-colors">
               <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
               Create
             </button>
@@ -395,7 +396,7 @@
 
   
   {#if deleteTarget}
-    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" on:click|self={() => deleteTarget = null}>
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onclick={(e) => { if (e.target === e.currentTarget) deleteTarget = null }}>
       <div class="w-72 rounded-lg border border-gray-700 bg-gray-900 shadow-2xl">
         <div class="flex flex-col items-center gap-2.5 p-5">
           <div class="p-2.5 rounded-full bg-red-500/20">
@@ -406,9 +407,9 @@
             <p class="text-[9px] text-gray-500 mt-0.5 font-mono">{deleteTarget.path}</p>
           </div>
           <div class="flex gap-1.5 w-full">
-            <button on:click={() => deleteTarget = null} class="flex-1 py-1.5 rounded text-[9px] text-gray-500 hover:text-gray-200 border border-gray-700 hover:border-gray-500 transition-colors">Cancel</button>
+            <button onclick={() => deleteTarget = null} class="flex-1 py-1.5 rounded text-[9px] text-gray-500 hover:text-gray-200 border border-gray-700 hover:border-gray-500 transition-colors">Cancel</button>
             <button
-              on:click={() => handleDelete(deleteTarget!.name, deleteTarget!.type)}
+              onclick={() => handleDelete(deleteTarget!.name, deleteTarget!.type)}
               class="flex-1 flex items-center justify-center gap-1 py-1.5 rounded text-[9px] font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
             >
               <svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>

@@ -39,6 +39,8 @@
   <div
     class="w-full h-full border-2 rounded border-blue-500 cursor-pointer relative bg-gray-950"
     tabindex="0"
+    role="button"
+    aria-label="Tile: {node.content}"
     onfocus={() => focus.set(node.id)}
     ondblclick={() => handleSplit('h')}
     onkeydown={(e) => {

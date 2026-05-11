@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -390,6 +391,100 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 			if m.telemetry != nil {
 				m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "approval.granted", Token: params.Token})
 			}
+		}
+
+	case "dashboard.stats":
+		stats := map[string]interface{}{
+			"total_sessions":  len(m.sessions),
+			"active_sessions": len(m.sessions),
+			"uptime_seconds":  time.Since(time.Now().Add(-time.Hour)).Seconds(), // placeholder
+			"timestamp":       time.Now().UnixMilli(),
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "dashboard.stats.response", Data: json.RawMessage(mustMarshal(stats))})
+
+	case "analytics.get":
+		var params struct {
+			Days int `json:"days"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if params.Days == 0 {
+			params.Days = 7
+		}
+		result := map[string]interface{}{
+			"totals": map[string]interface{}{
+				"total_input":          0,
+				"total_output":         0,
+				"total_sessions":       len(m.sessions),
+				"total_api_calls":      0,
+				"total_estimated_cost": nil,
+			},
+			"daily":     []interface{}{},
+			"by_model":  []interface{}{},
+			"skills":    map[string]interface{}{"top_skills": []interface{}{}},
+			"period":    params.Days,
+			"timestamp": time.Now().UnixMilli(),
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "analytics.result", Data: json.RawMessage(mustMarshal(result))})
+
+	case "system.info":
+		info := map[string]interface{}{
+			"version":    "v1.0.0",
+			"go_version": "1.26",
+			"os":         runtime.GOOS,
+			"arch":       runtime.GOARCH,
+			"timestamp":  time.Now().UnixMilli(),
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.info.response", Data: json.RawMessage(mustMarshal(info))})
+
+	case "system.resources":
+		var memStats runtime.MemStats
+		runtime.ReadMemStats(&memStats)
+		res := map[string]interface{}{
+			"memory_alloc_mb":   float64(memStats.Alloc) / 1024 / 1024,
+			"memory_total_mb":   float64(memStats.TotalAlloc) / 1024 / 1024,
+			"goroutines":        runtime.NumGoroutine(),
+			"num_cpu":           runtime.NumCPU(),
+			"gc_pause_ns":       memStats.PauseTotalNs,
+			"timestamp":         time.Now().UnixMilli(),
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.resources.response", Data: json.RawMessage(mustMarshal(res))})
+
+	case "system.services":
+		services := map[string]interface{}{
+			"services": []map[string]interface{}{
+				{"name": "websocket", "status": "running"},
+				{"name": "pty", "status": "running"},
+				{"name": "browser", "status": "available"},
+				{"name": "audio", "status": func() string { if m.audio != nil { return "available" }; return "unavailable" }()},
+			},
+			"timestamp": time.Now().UnixMilli(),
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.services.response", Data: json.RawMessage(mustMarshal(services))})
+
+	case "observability.status":
+		status := map[string]interface{}{
+			"connected": m.telemetry != nil,
+			"timestamp": time.Now().UnixMilli(),
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.status", Data: json.RawMessage(mustMarshal(status))})
+
+	case "fs.delete":
+		var params struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if err := os.RemoveAll(params.Path); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		sess.Send(Event{Protocol: "ui", Event: "fs.delete.success", Data: json.RawMessage(fmt.Sprintf(`{"path":%s}`, mustMarshal(params.Path)))})
+		if m.telemetry != nil {
+			m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "fs.delete", Command: params.Path})
 		}
 	}
 }

@@ -50,5 +50,5 @@
 <div
   class="bg-gray-800 hover:bg-blue-500 transition-colors cursor-ew-resize select-none"
   class:opacity-100={isDragging}
-  on:mousedown={onMousedown}
+  onmousedown={onMousedown}
 ></div>
