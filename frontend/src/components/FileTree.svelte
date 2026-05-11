@@ -78,13 +78,29 @@
     }, 10_000)
   }
 
+  function fullPathFor(entry: Entry): string {
+    return currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`
+  }
+
   function handleFileClick(entry: Entry) {
     if (entry.type === "directory") {
-      navigateTo(currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`)
+      navigateTo(fullPathFor(entry))
     } else {
-      const fullPath = currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`
-      dispatch("file:open", { path: fullPath })
+      dispatch("file:open", { path: fullPathFor(entry) })
     }
+  }
+
+  function handleDragStart(e: DragEvent, entry: Entry) {
+    if (entry.type !== "file") return
+    const filePath = fullPathFor(entry)
+    e.dataTransfer?.setData("text/plain", filePath)
+    e.dataTransfer!.effectAllowed = "copy"
+    // Visual: mark dragged item
+    setTimeout(() => (e.target as HTMLElement)?.classList.add("opacity-50"), 0)
+  }
+
+  function handleDragEnd(e: DragEvent) {
+    (e.target as HTMLElement)?.classList.remove("opacity-50")
   }
 
   function formatSize(bytes: number): string {
@@ -173,6 +189,9 @@
             <li
               class="flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 cursor-pointer transition-colors rounded-lg"
               onclick={() => handleFileClick(entry)}
+              draggable={entry.type === "file"}
+              ondragstart={(e) => handleDragStart(e, entry)}
+              ondragend={handleDragEnd}
             >
               <span class="text-base shrink-0">
                 {#if entry.type === "directory"}

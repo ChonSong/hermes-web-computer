@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"hermes-web-computer/backend/layout"
 	"hermes-web-computer/backend/pty"
 	"hermes-web-computer/backend/security"
 )
@@ -13,6 +14,8 @@ func newTestMultiplexer() *Multiplexer {
 		sessions:   make(map[string]*Session),
 		supervisor: pty.NewSupervisor(),
 		enforcer:   security.NewEnforcer(),
+		layout:     layout.NewRoot("xterm"),
+		contextMgr: NewContextManager(),
 	}
 	m.enforcer.UseDefaults()
 	return m

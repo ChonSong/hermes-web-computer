@@ -7,6 +7,7 @@
     role: "user" | "agent"
     text: string
     timestamp: Date
+    attachment?: string
   }
 
   let messages: Message[] = $state([
@@ -24,6 +25,7 @@
   let agentTyping = $state(false)
   let audioStatus = $state<"idle" | "listening" | "error">("idle")
   let collapsed = $state(false)
+  let dropTargetActive = $state(false)
 
   // MediaRecorder state for voice
   let mediaRecorder: MediaRecorder | null = $state(null)
@@ -120,6 +122,40 @@
     }
   }
 
+  // Drag-and-drop handlers for file drops into agent chat
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault()
+    e.dataTransfer!.dropEffect = "copy"
+    dropTargetActive = true
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    // Only deactivate if we actually left the panel (not just entered a child)
+    if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+      dropTargetActive = false
+    }
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault()
+    dropTargetActive = false
+    const filePath = e.dataTransfer?.getData("text/plain")
+    if (!filePath) return
+
+    // Send file content request via WS
+    wsSend({ protocol: "ui", method: "fs.read", params: { path: filePath } })
+
+    // Add user message with file attachment indicator
+    messages.push({
+      id: String(nextId++),
+      role: "user",
+      text: `📎 Attached file: \`${filePath}\``,
+      timestamp: new Date(),
+      attachment: filePath,
+    })
+    agentTyping = true
+  }
+
   let chatArea: HTMLElement | undefined = $state()
 
   $effect(() => {
@@ -202,6 +238,12 @@
   class:w-0={collapsed}
   class:w-[320px]={!collapsed}
   class:opacity-0={collapsed}
+  class:border-purple-500={dropTargetActive}
+  class:ring-2={dropTargetActive}
+  class:ring-purple-400={dropTargetActive}
+  ondragover={handleDragOver}
+  ondragleave={handleDragLeave}
+  ondrop={handleDrop}
 >
   <!-- Header -->
   <div class="flex-shrink-0 px-4 py-2 flex items-center justify-between">
@@ -219,6 +261,12 @@
   <div bind:this={chatArea} class="flex-1 overflow-y-auto px-4 py-4 space-y-3">
     {#each messages as msg (msg.id)}
       <div class="{msg.role === 'user' ? 'text-right' : 'text-left'}">
+        {#if msg.attachment}
+          <div class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-purple-500/10 text-purple-300 mb-1 {msg.role === 'user' ? 'ml-auto' : ''}">
+            <span>📎</span>
+            <span class="truncate max-w-[200px]">{msg.attachment.split('/').pop()}</span>
+          </div>
+        {/if}
         <p class="text-sm leading-relaxed
           {msg.role === 'user' ? 'text-white' : 'text-purple-300'}">
           {msg.text}

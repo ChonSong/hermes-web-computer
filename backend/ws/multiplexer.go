@@ -57,6 +57,7 @@ type Multiplexer struct {
 	browser    *browser.Manager
 	hermesURL  string // Hermes Agent API endpoint
 	httpClient *http.Client
+	contextMgr *ContextManager // tracks focused tile for agent context awareness
 }
 
 // Session represents a single WebSocket connection.
@@ -82,10 +83,11 @@ func NewMultiplexer() *Multiplexer {
 			AgentState:   "idle",
 			ResumePolicy: "B",
 		},
-		layout:    layout.NewRoot("welcome"),
-		enforcer:  security.NewEnforcer(),
-		browser:   browser.NewManager(),
-		hermesURL: os.Getenv("HERMES_API_URL"),
+		layout:     layout.NewRoot("welcome"),
+		enforcer:   security.NewEnforcer(),
+		browser:    browser.NewManager(),
+		contextMgr: NewContextManager(),
+		hermesURL:  os.Getenv("HERMES_API_URL"),
 		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
 	if m.hermesURL == "" {
@@ -486,6 +488,9 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 		if m.telemetry != nil {
 			m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "fs.delete", Command: params.Path})
 		}
+
+	case "ui.focus.change":
+		m.handleFocusChange(sess, env.Params, sessionID)
 	}
 }
 
@@ -777,9 +782,13 @@ func (m *Multiplexer) handleChatWithHermes(sess *Session, sessionID string, mess
 		m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "chat.send", Command: trunc})
 	}
 
-	// Build the request to Hermes Agent
+	// Build the request to Hermes Agent, including focus context for auto-scoping
 	reqBody := map[string]interface{}{
 		"message": message,
+	}
+	// Attach focus context so agent can auto-scope responses
+	if scope := m.contextMgr.BuildAgentScope(); scope != "" {
+		reqBody["context"] = scope
 	}
 	reqData, err := json.Marshal(reqBody)
 	if err != nil {
