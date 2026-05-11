@@ -4,6 +4,7 @@
   import { sendOp, on, appsLaunch, fsRead } from "../stores/ws"
 
   let activeTab = $state<"files" | "apps">("files")
+  let collapsed = $state(false)
 
   function handleFileOpen(event: CustomEvent<{ path: string }>) {
     const path = event.detail.path
@@ -24,25 +25,40 @@
   }
 </script>
 
-<div class="h-full bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
+<div
+  class="h-full mt-12 ml-1 mb-1 flex flex-col overflow-hidden transition-all duration-200 ease-out
+    backdrop-blur-2xl bg-[#12121a]/80 border border-white/10 rounded-2xl shadow-panel"
+  class:w-0={collapsed}
+  class:w-[240px]={!collapsed}
+  class:opacity-0={collapsed}
+>
   <!-- Tab bar -->
-  <div class="flex border-b border-gray-800 shrink-0">
+  <div class="flex shrink-0 px-2 pt-2 gap-1">
     <button
-      class="flex-1 px-3 py-2 text-sm font-medium transition-colors {activeTab === 'files' ? 'text-white bg-gray-800 border-b-2 border-blue-500' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}"
+      class="flex-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-lg
+        {activeTab === 'files' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
       onclick={() => activeTab = "files"}
     >
       📁 Files
     </button>
     <button
-      class="flex-1 px-3 py-2 text-sm font-medium transition-colors {activeTab === 'apps' ? 'text-white bg-gray-800 border-b-2 border-blue-500' : 'text-gray-400 hover:text-gray-200 hover:bg-gray-800/50'}"
+      class="flex-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-lg
+        {activeTab === 'apps' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
       onclick={() => activeTab = "apps"}
     >
       🚀 Apps
     </button>
+    <button
+      class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+      onclick={() => collapsed = !collapsed}
+      aria-label="Toggle panel"
+    >
+      ◀
+    </button>
   </div>
 
   <!-- Content -->
-  <div class="flex-1 overflow-y-auto">
+  <div class="flex-1 overflow-y-auto px-1 pb-1">
     {#if activeTab === "files"}
       <FileTree on:file:open={handleFileOpen} />
     {:else}
@@ -50,3 +66,12 @@
     {/if}
   </div>
 </div>
+
+<!-- Collapse trigger edge -->
+{#if collapsed}
+  <div
+    class="absolute left-0 top-12 bottom-1 w-[3px] bg-purple-500/40 cursor-pointer hover:bg-purple-500 transition-colors"
+    onclick={() => collapsed = false}
+    aria-label="Expand panel"
+  />
+{/if}

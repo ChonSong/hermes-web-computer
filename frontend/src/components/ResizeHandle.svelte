@@ -48,7 +48,7 @@
 </script>
 
 <div
-  class="bg-gray-800 hover:bg-blue-500 transition-colors cursor-ew-resize select-none"
+  class="bg-white/10 hover:bg-purple-500/50 transition-colors cursor-ew-resize select-none w-0.5"
   class:opacity-100={isDragging}
   onmousedown={onMousedown}
 ></div>

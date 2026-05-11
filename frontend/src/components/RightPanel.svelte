@@ -23,6 +23,7 @@
   let nextId = $state(2)
   let agentTyping = $state(false)
   let audioStatus = $state<"idle" | "listening" | "error">("idle")
+  let collapsed = $state(false)
 
   // MediaRecorder state for voice
   let mediaRecorder: MediaRecorder | null = $state(null)
@@ -195,48 +196,55 @@
   })
 </script>
 
-<div class="h-full flex flex-col bg-gray-900 border-l border-gray-800">
+<div
+  class="h-full mt-12 mr-1 mb-1 flex flex-col overflow-hidden transition-all duration-200 ease-out
+    backdrop-blur-2xl bg-[#12121a]/80 border border-white/10 rounded-2xl shadow-panel"
+  class:w-0={collapsed}
+  class:w-[320px]={!collapsed}
+  class:opacity-0={collapsed}
+>
   <!-- Header -->
-  <div class="flex-shrink-0 px-4 py-3 border-b border-gray-800 flex items-center">
+  <div class="flex-shrink-0 px-4 py-2 flex items-center justify-between">
     <h2 class="text-white font-semibold text-base">Agent</h2>
+    <button
+      class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
+      onclick={() => collapsed = !collapsed}
+      aria-label="Toggle panel"
+    >
+      ▶
+    </button>
   </div>
 
   <!-- Messages -->
-  <div bind:this={chatArea} class="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+  <div bind:this={chatArea} class="flex-1 overflow-y-auto px-4 py-4 space-y-3">
     {#each messages as msg (msg.id)}
-      <div class="flex {msg.role === 'user' ? 'justify-end' : 'justify-start'}">
-        <div
-          class="max-w-[80%] rounded-2xl px-4 py-2 text-sm leading-relaxed
-          {msg.role === 'user'
-            ? 'bg-blue-600 text-white rounded-br-md'
-            : 'bg-gray-800 text-gray-200 rounded-bl-md'}"
-        >
+      <div class="{msg.role === 'user' ? 'text-right' : 'text-left'}">
+        <p class="text-sm leading-relaxed
+          {msg.role === 'user' ? 'text-white' : 'text-purple-300'}">
           {msg.text}
-        </div>
+        </p>
       </div>
     {/each}
     {#if agentTyping}
-      <div class="flex justify-start">
-        <div class="bg-gray-800 text-gray-400 rounded-2xl px-4 py-2 text-sm rounded-bl-md">
-          <div class="flex items-center gap-1">
-            <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
-            <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
-            <div class="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
-          </div>
+      <div class="text-left">
+        <div class="flex items-center gap-1">
+          <div class="w-1.5 h-1.5 bg-purple-400/50 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+          <div class="w-1.5 h-1.5 bg-purple-400/50 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+          <div class="w-1.5 h-1.5 bg-purple-400/50 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
         </div>
       </div>
     {/if}
   </div>
 
   <!-- Input area -->
-  <div class="flex-shrink-0 px-4 py-3 border-t border-gray-800">
+  <div class="flex-shrink-0 px-4 py-3">
     <div class="flex items-center gap-2">
       <!-- Voice record button -->
       {#if !isRecording}
         <button
           onclick={startRecording}
-          class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors
-                 bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-red-400"
+          class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors
+                 bg-white/5 text-gray-400 hover:bg-white/10 hover:text-red-400 border border-white/10"
           aria-label="Start recording"
           title="Start recording"
         >
@@ -249,8 +257,8 @@
       {:else}
         <button
           onclick={stopRecording}
-          class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center transition-colors
-                 bg-red-900 text-red-400 hover:bg-red-800 animate-pulse"
+          class="flex-shrink-0 w-9 h-9 rounded-full flex items-center justify-center transition-colors
+                 bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse"
           aria-label="Stop recording"
           title="Stop recording"
         >
@@ -267,21 +275,21 @@
         <span class="text-xs text-red-500 font-mono">⚠ mic error</span>
       {/if}
 
-      <!-- Text input -->
+      <!-- Text input - floating pill -->
       <input
         type="text"
         bind:value={input}
         onkeydown={handleKeydown}
         placeholder="Type a message..."
-        class="flex-1 bg-gray-800 text-gray-200 rounded-lg px-3 py-2 text-sm
-               placeholder-gray-500 border border-gray-700
-               focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+        class="flex-1 bg-white/5 text-white rounded-full px-4 py-2 text-sm
+               placeholder-gray-500 border border-white/10
+               focus:outline-none focus:border-purple-500/50 focus:ring-1 focus:ring-purple-500/20"
       />
 
       <!-- Send button -->
       <button
         onclick={send}
-        class="flex-shrink-0 w-9 h-9 rounded-lg bg-blue-600 hover:bg-blue-500
+        class="flex-shrink-0 w-9 h-9 rounded-full bg-purple-600 hover:bg-purple-500
                text-white flex items-center justify-center transition-colors
                disabled:opacity-40 disabled:cursor-not-allowed"
         aria-label="Send message"
@@ -295,3 +303,12 @@
     </div>
   </div>
 </div>
+
+<!-- Collapse trigger edge -->
+{#if collapsed}
+  <div
+    class="absolute right-0 top-12 bottom-1 w-[3px] bg-purple-500/40 cursor-pointer hover:bg-purple-500 transition-colors"
+    onclick={() => collapsed = false}
+    aria-label="Expand panel"
+  />
+{/if}

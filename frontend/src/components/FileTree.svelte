@@ -110,12 +110,12 @@
   })
 </script>
 
-<div class="flex flex-col h-full bg-gray-900 text-gray-200 text-sm font-mono">
+<div class="flex flex-col h-full text-gray-200 text-sm font-mono">
   <!-- Breadcrumb Navigation -->
-  <div class="flex items-center gap-1 px-3 py-2 bg-gray-800 border-b border-gray-700 overflow-x-auto whitespace-nowrap">
+  <div class="flex items-center gap-1 px-3 py-2 border-b border-white/5 overflow-x-auto whitespace-nowrap">
     {#each breadcrumbs() as crumb, i}
       <button
-        class="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+        class="text-purple-400 hover:text-purple-300 hover:underline cursor-pointer"
         onclick={() => navigateTo(crumb || "/")}
       >
         {crumb || "/"}
@@ -128,9 +128,9 @@
 
   <!-- Parent Directory Button -->
   {#if currentPath !== "/"}
-    <div class="px-3 py-1 bg-gray-850 border-b border-gray-700">
+    <div class="px-3 py-1 border-b border-white/5">
       <button
-        class="flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 cursor-pointer transition-colors"
+        class="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-white/5 text-gray-400 hover:text-gray-200 cursor-pointer transition-colors"
         onclick={navigateUp}
       >
         <span>..</span>
@@ -142,7 +142,7 @@
   <!-- Loading Spinner -->
   {#if loading}
     <div class="flex items-center justify-center py-8">
-      <div class="animate-spin h-5 w-5 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+      <div class="animate-spin h-5 w-5 border-2 border-purple-400 border-t-transparent rounded-full"></div>
       <span class="ml-2 text-gray-400">Loading...</span>
     </div>
   {/if}
@@ -168,10 +168,10 @@
           Empty directory
         </div>
       {:else}
-        <ul class="divide-y divide-gray-800">
+        <ul>
           {#each entries as entry (entry.name)}
             <li
-              class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-800 cursor-pointer transition-colors"
+              class="flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 cursor-pointer transition-colors rounded-lg"
               onclick={() => handleFileClick(entry)}
             >
               <span class="text-base shrink-0">
@@ -181,7 +181,7 @@
                   📄
                 {/if}
               </span>
-              <span class="flex-1 truncate {entry.type === "directory" ? "text-blue-300 font-medium" : "text-gray-300"}">
+              <span class="flex-1 truncate {entry.type === "directory" ? "text-purple-300 font-medium" : "text-gray-300"}">
                 {entry.name}
               </span>
               {#if entry.type === "file"}

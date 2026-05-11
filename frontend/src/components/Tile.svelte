@@ -12,6 +12,8 @@
 
   let { node, depth = 0 }: { node: LayoutTree; depth?: number } = $props()
 
+  const isActive = $derived($focus === node.id)
+
   function handleSplit(dir: string) {
     send({ protocol: "ui", method: "layout.update", params: {
       op: "split", target_id: node.id, direction: dir, content: "xterm"
@@ -37,7 +39,9 @@
   </div>
 {:else}
   <div
-    class="w-full h-full border-2 rounded border-blue-500 cursor-pointer relative bg-gray-950"
+    class="w-full h-full border-2 rounded-2xl cursor-pointer relative transition-all duration-200 ease-out
+      backdrop-blur-xl bg-[#12121a]/90 border-white/10 shadow-panel
+      {isActive ? 'border-glass-border-active ring-1 ring-purple-500/20' : ''}"
     tabindex="0"
     role="button"
     aria-label="Tile: {node.content}"

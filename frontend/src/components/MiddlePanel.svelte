@@ -3,7 +3,7 @@
   import { layout } from "../stores/ws"
 </script>
 
-<div class="h-full bg-gray-950 overflow-hidden">
+<div class="h-full bg-transparent overflow-hidden p-1 gap-1">
   {#if $layout.tree}
     <Tile node={$layout.tree} />
   {:else}

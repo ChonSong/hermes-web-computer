@@ -16,7 +16,7 @@
       fontSize: 14,
       fontFamily: "monospace",
       theme: {
-        background: "#0a0a0a",
+        background: "transparent",
         foreground: "#e0e0e0",
         cursor: "#60a5fa",
       },
