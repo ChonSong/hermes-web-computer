@@ -176,4 +176,38 @@ export function audioStream(opusChunk: Uint8Array): string {
   return send({ protocol: "audio", method: "audio.stream", params: { opus_chunk: Array.from(opusChunk) } })
 }
 
+// Dashboard helpers
+export function dashStats(): string {
+  return send({ protocol: "ui", method: "dashboard.stats" })
+}
+
+export function analyticsGet(days: number = 7): string {
+  return send({ protocol: "ui", method: "analytics.get", params: { days } })
+}
+
+export function systemInfo(): string {
+  return send({ protocol: "ui", method: "system.info" })
+}
+
+export function systemResources(): string {
+  return send({ protocol: "ui", method: "system.resources" })
+}
+
+export function systemServices(): string {
+  return send({ protocol: "ui", method: "system.services" })
+}
+
+export function observabilityStatus(): string {
+  return send({ protocol: "ui", method: "observability.status" })
+}
+
+export function fsDelete(path: string): string {
+  return send({ protocol: "ui", method: "fs.delete", params: { path } })
+}
+
+// App launch helpers for dashboard tile types
+export function launchDashTile(type: string): string {
+  return send({ protocol: "ui", method: "apps.launch", params: { type } })
+}
+
 // Don't auto-connect - let main.ts call connect()

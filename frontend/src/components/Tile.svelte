@@ -2,6 +2,11 @@
   import Terminal from "./Terminal.svelte"
   import Monaco from "./Monaco.svelte"
   import Browser from "./Browser.svelte"
+  import DashOverview from "./DashOverview.svelte"
+  import DashFileManager from "./DashFileManager.svelte"
+  import DashObservability from "./DashObservability.svelte"
+  import DashAnalytics from "./DashAnalytics.svelte"
+  import DashSystemStatus from "./DashSystemStatus.svelte"
   import { send, focus } from "../stores/ws"
   import type { LayoutTree } from "../stores/ws"
 
@@ -50,6 +55,16 @@
       <Monaco filePath={node.path} />
     {:else if node.content === 'browser'}
       <Browser id={node.id} browserId={node.browser_id ?? ''} />
+    {:else if node.content === 'dash-overview'}
+      <DashOverview />
+    {:else if node.content === 'dash-filemanager'}
+      <DashFileManager />
+    {:else if node.content === 'dash-observability'}
+      <DashObservability />
+    {:else if node.content === 'dash-analytics'}
+      <DashAnalytics />
+    {:else if node.content === 'dash-system-status'}
+      <DashSystemStatus />
     {:else if node.content === 'welcome'}
       <div class="flex items-center justify-center h-full text-gray-400">
         <div class="text-center">

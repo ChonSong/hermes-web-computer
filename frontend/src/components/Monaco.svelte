@@ -8,8 +8,10 @@
   let loading = $state(true)
   let error = $state<string | null>(null)
   let saved = $state(true)
-  let currentPath = $state(path)
+  let currentPath = $state("")
   let dirty = $state(false)
+
+  $effect(() => { currentPath = path })
 
   onMount(async () => {
     const { default: monaco } = await import("monaco-editor")
