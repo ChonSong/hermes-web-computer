@@ -16,9 +16,10 @@ type LayoutTree struct {
 	ID        string       `json:"id"`
 	Type      string       `json:"type"`       // "split" or "leaf"
 	Direction string       `json:"direction"`  // "h" or "v"
-	Content   string       `json:"content"`    // "xterm", "monaco", "welcome"
+	Content   string       `json:"content"`    // "xterm", "monaco", "browser", "welcome"
 	Path      string       `json:"path"`       // file path for monaco
 	PTYID     string       `json:"pty_id"`     // PTY session ID for xterm
+	BrowserID string       `json:"browser_id"` // Browser session ID for browser
 	Children  []LayoutTree `json:"children"`
 	Size      float64      `json:"size"`       // 0.0-1.0 relative to parent
 	focused   bool         // internal focus state
@@ -31,6 +32,7 @@ type Op struct {
 	Direction string  `json:"direction,omitempty"`
 	Content   string  `json:"content,omitempty"`
 	PTYID     string  `json:"pty_id,omitempty"`
+	BrowserID string  `json:"browser_id,omitempty"`
 	Size      float64 `json:"size,omitempty"`
 }
 

@@ -23,6 +23,7 @@ export interface LayoutTree {
   children?: LayoutTree[]
   path?: string
   pty_id?: string
+  browser_id?: string
   size?: number
 }
 
@@ -32,6 +33,7 @@ export interface LayoutOp {
   direction?: string
   content?: string
   pty_id?: string
+  browser_id?: string
   size?: number
 }
 

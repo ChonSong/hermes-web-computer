@@ -21,6 +21,7 @@ func (m *Multiplexer) handleAppsList(sess *Session) {
 		{ID: "terminal", Name: "Terminal", Icon: "⬛"},
 		{ID: "editor", Name: "Editor", Icon: "📝"},
 		{ID: "preview", Name: "Preview", Icon: "👁"},
+		{ID: "browser", Name: "Browser", Icon: "🌐"},
 	}
 	sess.Send(Event{Protocol: "ui", Event: "apps.list.response", Data: mustMarshal(map[string]interface{}{"apps": apps})})
 }
@@ -61,6 +62,18 @@ func (m *Multiplexer) handleAppsLaunch(sess *Session, params json.RawMessage) {
 	case "preview":
 		sess.Send(Event{Protocol: "ui", Event: "apps.launch.response", Data: mustMarshal(map[string]interface{}{
 			"type": "preview",
+		})})
+
+	case "browser":
+		browserSessionID := fmt.Sprintf("browser_%d", time.Now().UnixNano())
+		if _, err := m.browser.Launch(browserSessionID); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "apps.error", Data: mustMarshal(map[string]string{"message": err.Error()})})
+			return
+		}
+		sess.Send(Event{Protocol: "ui", Event: "apps.launch.response", Data: mustMarshal(map[string]interface{}{
+			"type":         "browser",
+			"browser_id":   browserSessionID,
+			"url":          "about:blank",
 		})})
 
 	default:

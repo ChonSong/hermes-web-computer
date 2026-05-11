@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"hermes-web-computer/backend/audio"
+	"hermes-web-computer/backend/browser"
 	"hermes-web-computer/backend/layout"
 	"hermes-web-computer/backend/pty"
 	"hermes-web-computer/backend/security"
@@ -52,6 +53,7 @@ type Multiplexer struct {
 	telemetry  *telemetry.RingBuffer
 	syncer     *telemetry.Syncer
 	audio      *audio.Bridge
+	browser    *browser.Manager
 	hermesURL  string // Hermes Agent API endpoint
 	httpClient *http.Client
 }
@@ -79,8 +81,9 @@ func NewMultiplexer() *Multiplexer {
 			AgentState:   "idle",
 			ResumePolicy: "B",
 		},
-		layout:   layout.NewRoot("welcome"),
-		enforcer: security.NewEnforcer(),
+		layout:    layout.NewRoot("welcome"),
+		enforcer:  security.NewEnforcer(),
+		browser:   browser.NewManager(),
 		hermesURL: os.Getenv("HERMES_API_URL"),
 		httpClient: &http.Client{Timeout: 60 * time.Second},
 	}
@@ -451,8 +454,139 @@ func (m *Multiplexer) routeAgent(env Envelope, sess *Session, sessionID string) 
 		log.Printf("tool.execute: %s", string(env.Params))
 
 	case "browser.navigate":
-		// TODO: browser navigation
-		log.Printf("browser.navigate: %s", string(env.Params))
+		var params struct {
+			SessionID string `json:"session_id"`
+			URL       string `json:"url"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			log.Printf("browser.navigate unmarshal error: %v", err)
+			return
+		}
+		inst := m.browser.GetInstance(params.SessionID)
+		if inst == nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(`{"message":"browser instance not found"}`)})
+			return
+		}
+		if err := inst.Navigate(params.URL); err != nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		url := inst.GetURL()
+		screenshot, err := inst.Screenshot()
+		if err != nil {
+			log.Printf("browser.screenshot error: %v", err)
+		}
+		sess.Send(Event{Protocol: "agent", Event: "browser.navigated", Data: json.RawMessage(fmt.Sprintf(`{"session_id":%s,"url":%s,"screenshot":%s}`, mustMarshal(params.SessionID), mustMarshal(url), mustMarshal(screenshot)))})
+		log.Printf("browser navigated to %s", params.URL)
+
+	case "browser.screenshot":
+		var params struct {
+			SessionID string `json:"session_id"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			log.Printf("browser.screenshot unmarshal error: %v", err)
+			return
+		}
+		inst := m.browser.GetInstance(params.SessionID)
+		if inst == nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(`{"message":"browser instance not found"}`)})
+			return
+		}
+		screenshot, err := inst.Screenshot()
+		if err != nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		sess.Send(Event{Protocol: "agent", Event: "browser.screenshot.response", Data: json.RawMessage(fmt.Sprintf(`{"session_id":%s,"screenshot":%s}`, mustMarshal(params.SessionID), mustMarshal(screenshot)))})
+
+	case "browser.click":
+		var params struct {
+			SessionID string  `json:"session_id"`
+			X         float64 `json:"x"`
+			Y         float64 `json:"y"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			log.Printf("browser.click unmarshal error: %v", err)
+			return
+		}
+		inst := m.browser.GetInstance(params.SessionID)
+		if inst == nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(`{"message":"browser instance not found"}`)})
+			return
+		}
+		if err := inst.Click(params.X, params.Y); err != nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		sess.Send(Event{Protocol: "agent", Event: "browser.clicked"})
+
+	case "browser.input":
+		var params struct {
+			SessionID string `json:"session_id"`
+			Text      string `json:"text"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			log.Printf("browser.input unmarshal error: %v", err)
+			return
+		}
+		inst := m.browser.GetInstance(params.SessionID)
+		if inst == nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(`{"message":"browser instance not found"}`)})
+			return
+		}
+		if err := inst.Input(params.Text); err != nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		sess.Send(Event{Protocol: "agent", Event: "browser.input.done"})
+
+	case "browser.back":
+		var params struct {
+			SessionID string `json:"session_id"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			log.Printf("browser.back unmarshal error: %v", err)
+			return
+		}
+		inst := m.browser.GetInstance(params.SessionID)
+		if inst == nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(`{"message":"browser instance not found"}`)})
+			return
+		}
+		if err := inst.GoBack(); err != nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		url := inst.GetURL()
+		screenshot, err := inst.Screenshot()
+		if err != nil {
+			log.Printf("browser.screenshot error: %v", err)
+		}
+		sess.Send(Event{Protocol: "agent", Event: "browser.navigated", Data: json.RawMessage(fmt.Sprintf(`{"session_id":%s,"url":%s,"screenshot":%s}`, mustMarshal(params.SessionID), mustMarshal(url), mustMarshal(screenshot)))})
+
+	case "browser.forward":
+		var params struct {
+			SessionID string `json:"session_id"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			log.Printf("browser.forward unmarshal error: %v", err)
+			return
+		}
+		inst := m.browser.GetInstance(params.SessionID)
+		if inst == nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(`{"message":"browser instance not found"}`)})
+			return
+		}
+		if err := inst.GoForward(); err != nil {
+			sess.Send(Event{Protocol: "agent", Event: "browser.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		url := inst.GetURL()
+		screenshot, err := inst.Screenshot()
+		if err != nil {
+			log.Printf("browser.screenshot error: %v", err)
+		}
+		sess.Send(Event{Protocol: "agent", Event: "browser.navigated", Data: json.RawMessage(fmt.Sprintf(`{"session_id":%s,"url":%s,"screenshot":%s}`, mustMarshal(params.SessionID), mustMarshal(url), mustMarshal(screenshot)))})
 
 	case "chat.send":
 		var params struct {
