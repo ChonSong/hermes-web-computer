@@ -167,7 +167,7 @@
 </script>
 
 <div class="flex flex-col h-full overflow-hidden">
-  <div class="flex items-center justify-between px-4 py-3 border-b border-gray-800 shrink-0">
+  <div class="flex items-center justify-between px-4 py-3 border-b border-white/10 shrink-0">
     <div class="flex items-center gap-2">
       <svg class="w-4 h-4 text-blue-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>
       <h2 class="text-sm font-bold text-gray-200">Dashboard</h2>
@@ -191,7 +191,7 @@
       <!-- KPI Grid -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3 mb-4">
         {#each kpis as kpi}
-          <div class="bento-card p-3 flex flex-col gap-1.5 bg-gray-900/50 border border-gray-800 rounded-lg">
+          <div class="bento-card p-3 flex flex-col gap-1.5 backdrop-blur-xl bg-[#12121a]/80 border border-white/10 rounded-xl">
             <div class="flex items-center justify-between">
               <span class="text-[10px] font-bold uppercase tracking-[0.07em] text-gray-500">
                 {kpi.label}
@@ -210,7 +210,7 @@
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-3">
         <!-- Container Status -->
-        <div class="bento-card p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
+        <div class="bento-card p-4 backdrop-blur-xl bg-[#12121a]/80 border border-white/10 rounded-xl">
           <div class="flex items-center gap-2 pb-2">
             <svg class="w-3.5 h-3.5 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="8" x="2" y="2" rx="2" ry="2"/><rect width="20" height="8" x="2" y="14" rx="2" ry="2"/><line x1="6" x2="6.01" y1="6" y2="6"/><line x1="6" x2="6.01" y1="18" y2="18"/></svg>
             <span class="text-[10px] font-bold uppercase tracking-[0.07em] text-gray-500">
@@ -247,7 +247,7 @@
         </div>
 
         <!-- Event Breakdown -->
-        <div class="bento-card p-4 bg-gray-900/50 border border-gray-800 rounded-lg">
+        <div class="bento-card p-4 backdrop-blur-xl bg-[#12121a]/80 border border-white/10 rounded-xl">
           <div class="flex items-center gap-2 pb-2">
             <svg class="w-3.5 h-3.5 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-2.48a2 2 0 0 0-1.93 1.46l-2.35 8.36a.25.25 0 0 1-.48 0L9.24 2.18a.25.25 0 0 0-.48 0l-2.35 8.36A2 2 0 0 1 4.49 12H2"/></svg>
             <span class="text-[10px] font-bold uppercase tracking-[0.07em] text-gray-500">
@@ -271,7 +271,7 @@
         </div>
 
         <!-- Recent Sessions -->
-        <div class="bento-card p-4 lg:col-span-2 bg-gray-900/50 border border-gray-800 rounded-lg">
+        <div class="bento-card p-4 lg:col-span-2 backdrop-blur-xl bg-[#12121a]/80 border border-white/10 rounded-xl">
           <div class="flex items-center gap-2 pb-2">
             <svg class="w-3.5 h-3.5 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/></svg>
             <span class="text-[10px] font-bold uppercase tracking-[0.07em] text-gray-500">
@@ -281,7 +281,7 @@
           <div class="overflow-x-auto">
             <table class="w-full text-xs">
               <thead>
-                <tr class="border-b border-gray-800">
+                <tr class="border-b border-white/10">
                   <th class="text-left py-1.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500">Session</th>
                   <th class="text-left py-1.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500">Created</th>
                   <th class="text-right py-1.5 text-[9px] font-semibold uppercase tracking-wider text-gray-500">Messages</th>
@@ -293,7 +293,7 @@
                   <tr><td colspan="4" class="py-3 text-center text-gray-500">No sessions</td></tr>
                 {:else}
                   {#each analytics.sessions.slice(0, 10) as s}
-                    <tr class="border-b border-gray-800/50 last:border-b-0 hover:bg-gray-800/30">
+                    <tr class="border-b border-white/10/50 last:border-b-0 hover:bg-gray-800/30">
                       <td class="py-1.5 font-mono text-[10px] truncate max-w-[250px] text-gray-400">{s.session_key}</td>
                       <td class="py-1.5 text-[10px] text-gray-500">
                         {new Date(s.created_at).toLocaleDateString()}

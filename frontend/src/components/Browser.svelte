@@ -119,11 +119,11 @@
   })
 </script>
 
-<div class="flex flex-col h-full bg-gray-950">
-  <!-- URL bar -->
-  <div class="flex items-center gap-1 p-1.5 bg-gray-900 border-b border-gray-700">
+<div class="flex flex-col h-full">
+  <!-- URL bar — glass panel style -->
+  <div class="flex items-center gap-1 p-1.5 bg-[#12121a]/60 backdrop-blur-sm border-b border-white/10">
     <button
-      class="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors text-sm"
+      class="px-2 py-1 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-sm"
       onclick={goBack}
       aria-label="Back"
       title="Back"
@@ -131,7 +131,7 @@
       ◀
     </button>
     <button
-      class="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors text-sm"
+      class="px-2 py-1 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-sm"
       onclick={goForward}
       aria-label="Forward"
       title="Forward"
@@ -139,7 +139,7 @@
       ▶
     </button>
     <button
-      class="px-2 py-1 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors text-sm"
+      class="px-2 py-1 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-sm"
       onclick={refresh}
       aria-label="Refresh"
       title="Refresh"
@@ -149,12 +149,12 @@
     <input
       type="text"
       bind:value={urlInput}
-      class="flex-1 px-3 py-1 bg-gray-800 border border-gray-600 rounded text-sm text-gray-200 focus:outline-none focus:border-blue-500"
+      class="flex-1 px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-sm text-gray-200 focus:outline-none focus:border-purple-500/50 placeholder-gray-500"
       placeholder="Enter URL..."
       onkeydown={(e) => { if (e.key === "Enter") handleUrlSubmit() }}
     />
     <button
-      class="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-500 text-white rounded transition-colors"
+      class="px-3 py-1 text-sm bg-purple-600/80 hover:bg-purple-500/80 text-white rounded-lg transition-colors"
       onclick={handleUrlSubmit}
     >
       Go
@@ -164,13 +164,13 @@
   <!-- Browser viewport -->
   <div class="flex-1 relative overflow-hidden" bind:this={imgContainer}>
     {#if loading}
-      <div class="absolute inset-0 flex items-center justify-center bg-gray-900">
+      <div class="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/80">
         <div class="text-gray-400">Loading...</div>
       </div>
     {/if}
 
     {#if error}
-      <div class="absolute inset-0 flex items-center justify-center bg-gray-900">
+      <div class="absolute inset-0 flex items-center justify-center bg-[#0a0a0f]/80">
         <div class="text-red-400 text-center p-4">
           <p class="font-bold">Error</p>
           <p class="text-sm mt-1">{error}</p>
