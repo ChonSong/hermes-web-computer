@@ -1,7 +1,11 @@
+import { mount } from "svelte"
 import App from "./App.svelte"
+import { connect } from "./stores/ws"
+import "./app.css"
 
-const app = new App({
-  target: document.getElementById("app")!,
-})
-
-export default app
+const target = document.getElementById("app")
+if (target) {
+  mount(App, { target })
+  console.log("Agent-OS mounted")
+  connect()
+}
