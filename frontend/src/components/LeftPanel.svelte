@@ -1,8 +1,27 @@
 <script lang="ts">
   import FileTree from "./FileTree.svelte"
   import AppLauncher from "./AppLauncher.svelte"
+  import { sendOp, on, appsLaunch, fsRead } from "../stores/ws"
 
   let activeTab = $state<"files" | "apps">("files")
+
+  function handleFileOpen(event: CustomEvent<{ path: string }>) {
+    const path = event.detail.path
+    // Create an editor tile in the layout tree
+    sendOp({
+      op: "split",
+      target_id: "root",
+      direction: "v",
+      content: "editor",
+      path: path,
+    })
+    // Read the file content to send to the editor
+    fsRead(path)
+  }
+
+  function handleLaunch(event: CustomEvent<{ type: string }>) {
+    appsLaunch(event.detail.type)
+  }
 </script>
 
 <div class="h-full bg-gray-900 border-r border-gray-800 flex flex-col overflow-hidden">
@@ -25,9 +44,9 @@
   <!-- Content -->
   <div class="flex-1 overflow-y-auto">
     {#if activeTab === "files"}
-      <FileTree />
+      <FileTree on:file:open={handleFileOpen} />
     {:else}
-      <AppLauncher />
+      <AppLauncher on:launch={handleLaunch} />
     {/if}
   </div>
 </div>

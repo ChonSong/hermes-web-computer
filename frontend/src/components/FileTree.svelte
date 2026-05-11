@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, createEventDispatcher } from "svelte"
-  import { send, on, ws } from "../stores/ws"
+  import { send, on, fsList } from "../stores/ws"
 
   interface Entry {
     name: string
@@ -40,14 +40,10 @@
     error = null
     entries = []
 
-    const reqId = send({
-      protocol: "agent",
-      method: "fs.list",
-      params: { path },
-    })
-
-    const unsub = on(`response.${reqId}`, (data: unknown) => {
+    // Register handlers BEFORE sending to avoid race condition
+    const unsub = on("fs.list.response", (data: unknown) => {
       unsub()
+      unsubErr()
       loading = false
       const resp = data as { entries?: Entry[]; error?: string }
       if (resp.error) {
@@ -60,10 +56,22 @@
       }
     })
 
+    const unsubErr = on("fs.error", (data: unknown) => {
+      unsub()
+      unsubErr()
+      loading = false
+      const resp = data as { message?: string }
+      error = resp.message || "Unknown error"
+    })
+
+    // Now send the request
+    send({ protocol: "ui", method: "fs.list", params: { path } })
+
     // Timeout fallback
     setTimeout(() => {
       if (loading) {
         unsub()
+        unsubErr()
         loading = false
         error = "Request timed out"
       }

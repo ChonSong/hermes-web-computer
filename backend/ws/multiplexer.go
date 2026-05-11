@@ -1,9 +1,11 @@
 package ws
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
 	"os"
@@ -50,6 +52,8 @@ type Multiplexer struct {
 	telemetry  *telemetry.RingBuffer
 	syncer     *telemetry.Syncer
 	audio      *audio.Bridge
+	hermesURL  string // Hermes Agent API endpoint
+	httpClient *http.Client
 }
 
 // Session represents a single WebSocket connection.
@@ -77,6 +81,11 @@ func NewMultiplexer() *Multiplexer {
 		},
 		layout:   layout.NewRoot("welcome"),
 		enforcer: security.NewEnforcer(),
+		hermesURL: os.Getenv("HERMES_API_URL"),
+		httpClient: &http.Client{Timeout: 60 * time.Second},
+	}
+	if m.hermesURL == "" {
+		m.hermesURL = "http://localhost:8642"
 	}
 	// Load security config (use defaults if file not found)
 	homeDir, _ := os.UserHomeDir()
@@ -444,11 +453,50 @@ func (m *Multiplexer) routeAgent(env Envelope, sess *Session, sessionID string) 
 	case "browser.navigate":
 		// TODO: browser navigation
 		log.Printf("browser.navigate: %s", string(env.Params))
+
+	case "chat.send":
+		var params struct {
+			Message string `json:"message"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			log.Printf("chat.send unmarshal error: %v", err)
+			m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		log.Printf("chat.send: %q", params.Message)
+
+		// Forward to Hermes Agent API
+		go m.handleChatWithHermes(sess, sessionID, params.Message)
 	}
 }
 
 func (m *Multiplexer) routeAudio(env Envelope, sess *Session, sessionID string) {
 	switch env.Method {
+	case "audio.start":
+		var params struct {
+			SessionID string `json:"session_id"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		sid := params.SessionID
+		if sid == "" {
+			sid = sessionID
+		}
+		// Register audio session
+		if m.audio != nil {
+			m.audio.StartSession(sid)
+			m.sendEvent(sess, Event{Protocol: "audio", Event: "audio.started", Data: json.RawMessage(fmt.Sprintf(`{"session_id":%s}`, mustMarshal(sid)))})
+			log.Printf("audio session started: %s", sid)
+		}
+
+	case "audio.stop":
+		if m.audio != nil {
+			m.audio.StopSession(sessionID)
+			m.sendEvent(sess, Event{Protocol: "audio", Event: "audio.stopped"})
+			log.Printf("audio session stopped: %s", sessionID)
+		}
+
 	case "audio.stream":
 		var params struct {
 			OpusChunk []byte `json:"opus_chunk"`
@@ -486,4 +534,98 @@ func (m *Multiplexer) routeAudio(env Envelope, sess *Session, sessionID string) 
 			}
 		}
 	}
+}
+
+// handleChatWithHermes forwards a chat message to the Hermes Agent API
+// and streams the response back to the client via WebSocket.
+func (m *Multiplexer) handleChatWithHermes(sess *Session, sessionID string, message string) {
+	// Telemetry
+	if m.telemetry != nil {
+		trunc := message
+		if len(trunc) > 100 {
+			trunc = trunc[:100]
+		}
+		m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "chat.send", Command: trunc})
+	}
+
+	// Build the request to Hermes Agent
+	reqBody := map[string]interface{}{
+		"message": message,
+	}
+	reqData, err := json.Marshal(reqBody)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"Failed to marshal request: %s"}`, err.Error()))})
+		return
+	}
+
+	// Try the Hermes Agent API endpoint
+	req, err := http.NewRequest("POST", m.hermesURL+"/api/chat", bytes.NewReader(reqData))
+	if err != nil {
+		log.Printf("hermes chat request error: %v", err)
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"Failed to connect to Hermes agent: %s"}`, err.Error()))})
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := m.httpClient.Do(req)
+	if err != nil {
+		log.Printf("hermes api error: %v", err)
+		// Fallback: send a friendly message
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.reply", Data: json.RawMessage(fmt.Sprintf(`{"message":"Agent is not available (Hermes not running on %s). Your message was: %q","complete":true}`, m.hermesURL, message))})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		log.Printf("hermes api non-200 response: %d - %s", resp.StatusCode, string(body))
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.reply", Data: json.RawMessage(fmt.Sprintf(`{"message":"Agent returned status %d: %s","complete":true}`, resp.StatusCode, string(body)))})
+		return
+	}
+
+	// Read and forward the response
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("hermes api read error: %v", err)
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.error", Data: json.RawMessage(`{"message":"Failed to read agent response"}`)})
+		return
+	}
+
+	// Try to parse as JSON response from Hermes
+	var hermesResp struct {
+		Message   string `json:"message"`
+		Response  string `json:"response"`
+		Text      string `json:"text"`
+		Reply     string `json:"reply"`
+		Content   string `json:"content"`
+		Streaming bool   `json:"streaming"`
+	}
+	if err := json.Unmarshal(body, &hermesResp); err == nil {
+		reply := hermesResp.Message
+		if reply == "" {
+			reply = hermesResp.Response
+		}
+		if reply == "" {
+			reply = hermesResp.Text
+		}
+		if reply == "" {
+			reply = hermesResp.Reply
+		}
+		if reply == "" {
+			reply = hermesResp.Content
+		}
+		if reply != "" {
+			m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.reply", Data: json.RawMessage(fmt.Sprintf(`{"message":%s,"complete":true}`, mustMarshal(reply)))})
+			return
+		}
+	}
+
+	// If not JSON, treat raw body as text response
+	if len(body) > 0 {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.reply", Data: json.RawMessage(fmt.Sprintf(`{"message":%s,"complete":true}`, mustMarshal(string(body))))})
+		return
+	}
+
+	// Empty response
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "chat.reply", Data: json.RawMessage(`{"message":"(empty response)","complete":true}`)})
 }

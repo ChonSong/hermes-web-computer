@@ -71,7 +71,7 @@ test.describe('keyboard-navigation', () => {
     const hasPalette = await page.evaluate(() => {
       return document.querySelector('[class*="palette"]') !== null ||
              document.querySelector('[class*="Palette"]') !== null ||
-             document.querySelector('[role="dialog"]') !== null
+             document.querySelector('.w-96.bg-gray-900') !== null
     })
 
     // Escape should close any overlay
@@ -104,7 +104,7 @@ test.describe('keyboard-navigation', () => {
     await page.waitForTimeout(300)
 
     // Verify the palette is closed by checking dialog state
-    const dialogVisible = await page.locator('[role="dialog"]').isVisible().catch(() => false)
+    const dialogVisible = await page.locator('.w-96.bg-gray-900').isVisible().catch(() => false)
     // After escape, dialog should be hidden or removed
     expect(dialogVisible).toBe(false)
   })

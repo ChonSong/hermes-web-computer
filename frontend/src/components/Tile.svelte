@@ -1,5 +1,6 @@
 <script lang="ts">
   import Terminal from "./Terminal.svelte"
+  import Monaco from "./Monaco.svelte"
   import { send, focus } from "../stores/ws"
   import type { LayoutTree } from "../stores/ws"
 
@@ -44,6 +45,8 @@
   >
     {#if node.content === 'xterm'}
       <Terminal ptyId={node.pty_id} />
+    {:else if node.content === 'editor'}
+      <Monaco filePath={node.path} />
     {:else if node.content === 'welcome'}
       <div class="flex items-center justify-center h-full text-gray-400">
         <div class="text-center">

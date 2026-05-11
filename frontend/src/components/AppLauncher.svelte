@@ -1,9 +1,6 @@
 <script lang="ts">
-  import { createEventDispatcher } from "svelte"
-
-  const dispatch = createEventDispatcher<{
-    launch: { type: string }
-  }>()
+  import { createEventDispatcher, onMount } from "svelte"
+  import { on, appsLaunch } from "../stores/ws"
 
   interface AppType {
     type: string
@@ -28,8 +25,23 @@
   let runningSessions = $state<Session[]>([])
 
   function handleLaunch(type: string) {
-    dispatch("launch", { type })
+    appsLaunch(type)
   }
+
+  // Listen for launch responses
+  onMount(() => {
+    on("apps.launch.response", (data: unknown) => {
+      const resp = data as { type: string; pty_id?: string }
+      if (resp.pty_id) {
+        runningSessions.push({ id: resp.pty_id, type: resp.type, name: `${resp.type} (${resp.pty_id.slice(4, 8)})` })
+      }
+    })
+
+    on("apps.error", (data: unknown) => {
+      const resp = data as { message?: string }
+      console.error("App launch error:", resp.message)
+    })
+  })
 </script>
 
 <div class="h-full bg-gray-900 overflow-auto">

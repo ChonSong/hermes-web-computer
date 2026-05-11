@@ -20,7 +20,7 @@ test.describe('File Edit Workflow', () => {
 
     // Step 3: Create a test file via terminal first (more reliable than UI navigation for deep paths)
     // Focus the terminal tile in the middle panel
-    const terminalTile = page.locator('div[tabindex="0"]').first()
+    const terminalTile = page.locator('div.border-blue-500').first()
     await terminalTile.click()
 
     // Use pty.write to create the test file
@@ -56,7 +56,7 @@ test.describe('File Edit Workflow', () => {
     } else {
       // Navigate via breadcrumb or use keyboard shortcut to open file directly
       // Try clicking on the tmp folder in the breadcrumb navigation
-      await page.locator('button:has-text("tmp")').first().click()
+      await page.locator('text=tmp').first().click()
     }
     await page.waitForTimeout(1500)
 

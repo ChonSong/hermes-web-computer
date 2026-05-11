@@ -125,3 +125,27 @@ func (b *Bridge) SendText(sessionID string, text string) error {
 	copy(payload[3:], text)
 	return b.conn.Write(context.Background(), websocket.MessageBinary, payload)
 }
+
+// StartSession registers a new active audio session.
+func (b *Bridge) StartSession(sessionID string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.sessions[sessionID] = &AudioSession{ID: sessionID, Active: true, Client: nil}
+}
+
+// StopSession deactivates and removes an audio session.
+func (b *Bridge) StopSession(sessionID string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if s, ok := b.sessions[sessionID]; ok {
+		s.Active = false
+		delete(b.sessions, sessionID)
+	}
+}
+
+// HasConnected returns true if the bridge is connected to Fun-Audio-Chat.
+func (b *Bridge) HasConnected() bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.conn != nil
+}

@@ -49,7 +49,7 @@ export const focus = writable<string>("root")
 export const ptyOutputs = writable<Map<string, string>>(new Map())
 
 let socket: WebSocket | null = null
-const handlers: Map<string, (data: unknown) => void> = new Map()
+const handlers: Map<string, Set<(data: unknown) => void>> = new Map()
 
 let reqId = 0
 function nextId(): string {
@@ -82,8 +82,12 @@ export function connect(url: string = "ws://localhost:3005/ws") {
         return map
       })
     }
-    const handler = handlers.get(event.event)
-    if (handler) handler(event.data)
+    const eventHandlers = handlers.get(event.event)
+    if (eventHandlers) {
+      for (const handler of eventHandlers) {
+        handler(event.data)
+      }
+    }
   }
 
   socket.onclose = () => {
@@ -108,8 +112,19 @@ export function sendOp(op: LayoutOp): string {
 }
 
 export function on(event: string, handler: (data: unknown) => void): () => void {
-  handlers.set(event, handler)
-  return () => handlers.delete(event)
+  if (!handlers.has(event)) {
+    handlers.set(event, new Set())
+  }
+  handlers.get(event)!.add(handler)
+  return () => {
+    const set = handlers.get(event)
+    if (set) {
+      set.delete(handler)
+      if (set.size === 0) {
+        handlers.delete(event)
+      }
+    }
+  }
 }
 
 // FS helpers
@@ -143,6 +158,20 @@ export function appsLaunch(type: string, path?: string): string {
 // Chat helpers
 export function chatSend(message: string): string {
   return send({ protocol: "agent", method: "chat.send", params: { message } })
+}
+
+// Audio helpers
+export function audioStart(sessionId?: string): string {
+  return send({ protocol: "audio", method: "audio.start", params: { session_id: sessionId } })
+}
+
+export function audioStop(): string {
+  return send({ protocol: "audio", method: "audio.stop" })
+}
+
+export function audioStream(opusChunk: Uint8Array): string {
+  // Convert Uint8Array to number[] for JSON serialization
+  return send({ protocol: "audio", method: "audio.stream", params: { opus_chunk: Array.from(opusChunk) } })
 }
 
 // Don't auto-connect - let main.ts call connect()
