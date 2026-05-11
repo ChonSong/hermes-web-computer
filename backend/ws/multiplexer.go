@@ -291,6 +291,25 @@ func (m *Multiplexer) route(env Envelope, sess *Session, sessionID string) {
 
 func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 	switch env.Method {
+
+	case "fs.list":
+		m.handleFSList(sess, env.Params)
+
+	case "fs.read":
+		m.handleFSRead(sess, env.Params)
+
+	case "fs.write":
+		m.handleFSWrite(sess, env.Params)
+
+	case "fs.stat":
+		m.handleFSStat(sess, env.Params)
+
+	case "apps.list":
+		m.handleAppsList(sess)
+
+	case "apps.launch":
+		m.handleAppsLaunch(sess, env.Params)
+
 	case "interrupt":
 		// Handle Shift+Space interrupt
 		if sess.ptyID != "" {

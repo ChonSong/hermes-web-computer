@@ -147,3 +147,22 @@ func (s *Supervisor) PTY(id string) *os.File {
 	}
 	return session.PTTY
 }
+
+// Exists checks if a PTY session with the given ID exists.
+func (s *Supervisor) Exists(id string) bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	_, ok := s.ptys[id]
+	return ok
+}
+
+// ListSessions returns all active PTY session IDs.
+func (s *Supervisor) ListSessions() []string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	ids := make([]string, 0, len(s.ptys))
+	for id := range s.ptys {
+		ids = append(ids, id)
+	}
+	return ids
+}

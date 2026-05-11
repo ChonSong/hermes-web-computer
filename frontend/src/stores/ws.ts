@@ -112,4 +112,37 @@ export function on(event: string, handler: (data: unknown) => void): () => void 
   return () => handlers.delete(event)
 }
 
+// FS helpers
+export function fsList(path: string): string {
+  return send({ protocol: "ui", method: "fs.list", params: { path } })
+}
+
+export function fsRead(path: string): string {
+  return send({ protocol: "ui", method: "fs.read", params: { path } })
+}
+
+export function fsWrite(path: string, content: string, encoding = "utf8"): string {
+  return send({ protocol: "ui", method: "fs.write", params: { path, content, encoding } })
+}
+
+export function fsStat(path: string): string {
+  return send({ protocol: "ui", method: "fs.stat", params: { path } })
+}
+
+// App helpers
+export function appsList(): string {
+  return send({ protocol: "ui", method: "apps.list" })
+}
+
+export function appsLaunch(type: string, path?: string): string {
+  const params: Record<string, string> = { type }
+  if (path) params.path = path
+  return send({ protocol: "ui", method: "apps.launch", params })
+}
+
+// Chat helpers
+export function chatSend(message: string): string {
+  return send({ protocol: "agent", method: "chat.send", params: { message } })
+}
+
 // Don't auto-connect - let main.ts call connect()

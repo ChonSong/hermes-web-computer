@@ -1,0 +1,190 @@
+<script lang="ts">
+  import { onMount, createEventDispatcher } from "svelte"
+  import { send, on, ws } from "../stores/ws"
+
+  interface Entry {
+    name: string
+    type: "file" | "directory"
+    size: number
+    mod_time: string
+  }
+
+  interface Events {
+    "file:open": { path: string }
+  }
+
+  const dispatch = createEventDispatcher<Events>()
+
+  let currentPath = $state("/opt/data/hermes-web-computer")
+  let entries = $state<Entry[]>([])
+  let loading = $state(false)
+  let error = $state<string | null>(null)
+
+  function navigateTo(path: string) {
+    currentPath = path
+    fetchEntries(path)
+  }
+
+  function navigateUp() {
+    const parts = currentPath.split("/").filter(Boolean)
+    if (parts.length <= 1) {
+      navigateTo("/")
+    } else {
+      parts.pop()
+      navigateTo("/" + parts.join("/"))
+    }
+  }
+
+  function fetchEntries(path: string) {
+    loading = true
+    error = null
+    entries = []
+
+    const reqId = send({
+      protocol: "agent",
+      method: "fs.list",
+      params: { path },
+    })
+
+    const unsub = on(`response.${reqId}`, (data: unknown) => {
+      unsub()
+      loading = false
+      const resp = data as { entries?: Entry[]; error?: string }
+      if (resp.error) {
+        error = resp.error
+      } else if (resp.entries) {
+        entries = resp.entries.sort((a, b) => {
+          if (a.type === b.type) return a.name.localeCompare(b.name)
+          return a.type === "directory" ? -1 : 1
+        })
+      }
+    })
+
+    // Timeout fallback
+    setTimeout(() => {
+      if (loading) {
+        unsub()
+        loading = false
+        error = "Request timed out"
+      }
+    }, 10_000)
+  }
+
+  function handleFileClick(entry: Entry) {
+    if (entry.type === "directory") {
+      navigateTo(currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`)
+    } else {
+      const fullPath = currentPath === "/" ? `/${entry.name}` : `${currentPath}/${entry.name}`
+      dispatch("file:open", { path: fullPath })
+    }
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+    return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+  }
+
+  function breadcrumbs(): string[] {
+    const parts = currentPath.split("/").filter(Boolean)
+    const crumbs: string[] = ["/"]
+    let acc = ""
+    for (const p of parts) {
+      acc += `/${p}`
+      crumbs.push(acc)
+    }
+    return crumbs
+  }
+
+  onMount(() => {
+    fetchEntries(currentPath)
+  })
+</script>
+
+<div class="flex flex-col h-full bg-gray-900 text-gray-200 text-sm font-mono">
+  <!-- Breadcrumb Navigation -->
+  <div class="flex items-center gap-1 px-3 py-2 bg-gray-800 border-b border-gray-700 overflow-x-auto whitespace-nowrap">
+    {#each breadcrumbs() as crumb, i}
+      <button
+        class="text-blue-400 hover:text-blue-300 hover:underline cursor-pointer"
+        onclick={() => navigateTo(crumb || "/")}
+      >
+        {crumb || "/"}
+      </button>
+      {#if i < breadcrumbs().length - 1}
+        <span class="text-gray-500">/</span>
+      {/if}
+    {/each}
+  </div>
+
+  <!-- Parent Directory Button -->
+  {#if currentPath !== "/"}
+    <div class="px-3 py-1 bg-gray-850 border-b border-gray-700">
+      <button
+        class="flex items-center gap-1 px-2 py-1 rounded hover:bg-gray-700 text-gray-400 hover:text-gray-200 cursor-pointer transition-colors"
+        onclick={navigateUp}
+      >
+        <span>..</span>
+        <span class="text-xs text-gray-500">Parent Directory</span>
+      </button>
+    </div>
+  {/if}
+
+  <!-- Loading Spinner -->
+  {#if loading}
+    <div class="flex items-center justify-center py-8">
+      <div class="animate-spin h-5 w-5 border-2 border-blue-400 border-t-transparent rounded-full"></div>
+      <span class="ml-2 text-gray-400">Loading...</span>
+    </div>
+  {/if}
+
+  <!-- Error Message -->
+  {#if error}
+    <div class="flex items-center justify-center py-8">
+      <span class="text-red-400">⚠ {error}</span>
+      <button
+        class="ml-3 px-2 py-1 bg-red-900/50 text-red-300 rounded hover:bg-red-900/80 cursor-pointer"
+        onclick={() => fetchEntries(currentPath)}
+      >
+        Retry
+      </button>
+    </div>
+  {/if}
+
+  <!-- File List -->
+  {#if !loading && !error}
+    <div class="flex-1 overflow-y-auto">
+      {#if entries.length === 0}
+        <div class="flex items-center justify-center py-8 text-gray-500">
+          Empty directory
+        </div>
+      {:else}
+        <ul class="divide-y divide-gray-800">
+          {#each entries as entry (entry.name)}
+            <li
+              class="flex items-center gap-2 px-3 py-1.5 hover:bg-gray-800 cursor-pointer transition-colors"
+              onclick={() => handleFileClick(entry)}
+            >
+              <span class="text-base shrink-0">
+                {#if entry.type === "directory"}
+                  📁
+                {:else}
+                  📄
+                {/if}
+              </span>
+              <span class="flex-1 truncate {entry.type === "directory" ? "text-blue-300 font-medium" : "text-gray-300"}">
+                {entry.name}
+              </span>
+              {#if entry.type === "file"}
+                <span class="text-gray-500 text-xs shrink-0">
+                  {formatSize(entry.size)}
+                </span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </div>
+  {/if}
+</div>
