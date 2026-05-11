@@ -15,13 +15,16 @@ var allowedRoot = "/opt/data/hermes-web-computer"
 
 // sanitizePath ensures the requested path doesn't escape the allowed root.
 func sanitizePath(reqPath string) (string, error) {
-	if reqPath == "" {
-		reqPath = "/"
+	if reqPath == "" || reqPath == "/" {
+		return allowedRoot, nil
 	}
 	clean := filepath.Clean(reqPath)
-	if !filepath.IsAbs(clean) {
-		clean = filepath.Join(allowedRoot, clean)
+	// Remove leading slash and join with allowed root
+	clean = strings.TrimPrefix(clean, "/")
+	if clean == "" {
+		return allowedRoot, nil
 	}
+	clean = filepath.Join(allowedRoot, clean)
 	resolved, err := filepath.EvalSymlinks(clean)
 	if err != nil {
 		if !strings.HasPrefix(filepath.Clean(clean), filepath.Clean(allowedRoot)) {
