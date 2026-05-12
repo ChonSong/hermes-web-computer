@@ -7,6 +7,7 @@
   import KeymapOverlay from "./components/KeymapOverlay.svelte"
   import WorkspacePill from "./components/WorkspacePill.svelte"
   import Dock from "./components/Dock.svelte"
+  import { workspaceStore, setActiveWorkspace, moveTileToWorkspace, toggleFloating } from "./stores/workspace"
   import { ws, send, focus, layout, type LayoutTree } from "./stores/ws"
   import { setContext, getContext } from "svelte"
 
@@ -15,9 +16,8 @@
   let showKeymap = $state(false)
   let showLeft = $state(true)
   let showRight = $state(true)
-
-  // Workspace state — shared with WorkspacePill via context
-  let activeWorkspace = $state(1)
+  // Active workspace from shared store (auto-subscribed, persists to localStorage)
+  let activeWorkspace = $derived($workspaceStore.activeWorkspace)
 
   // Panel width state
   let savedWidths: { left?: number; right?: number } = {}
@@ -159,28 +159,36 @@
       return
     }
 
-    // Shift+Space: float/toggle focused tile
-    if (e.shiftKey && e.key === " ") {
+    // Shift+1-9: switch workspace (via shared store, persists to localStorage)
+    if (e.shiftKey && !e.altKey && e.key >= "1" && e.key <= "9") {
       e.preventDefault()
-      const currentFocus = $focus
-      send({ protocol: "ui", method: "layout.update", params: {
-        op: "float", target_id: currentFocus
-      }})
+      setActiveWorkspace(parseInt(e.key, 10))
       return
     }
 
-    // Shift+1-9: switch workspace
-    if (e.shiftKey && e.key >= "1" && e.key <= "9") {
+    // Shift+Alt+1-9: move focused tile to workspace
+    if (e.shiftKey && e.altKey && e.key >= "1" && e.key <= "9") {
       e.preventDefault()
-      activeWorkspace = parseInt(e.key, 10)
+      const targetWs = parseInt(e.key, 10)
+      const currentFocus = $focus
+      moveTileToWorkspace(currentFocus, targetWs)
+      toggleFloating(currentFocus)
+      return
+    }
+
+    // Shift+Space: toggle float focused tile
+    if (e.shiftKey && e.key === " " && !e.altKey && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault()
+      const currentFocus = $focus
+      toggleFloating(currentFocus)
       return
     }
   }, true)
 
   // Provide workspace state via context for WorkspacePill
   setContext("activeWorkspace", {
-    get: () => activeWorkspace,
-    set: (v: number) => { activeWorkspace = v }
+    get: () => $workspaceStore.activeWorkspace,
+    set: setActiveWorkspace
   })
 </script>
 
