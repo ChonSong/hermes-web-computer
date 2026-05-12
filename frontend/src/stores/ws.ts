@@ -1,4 +1,5 @@
-import { writable } from "svelte/store"
+import { writable, type Writable, get } from "svelte/store"
+import { layoutState } from "./layout.svelte"
 
 export interface Envelope {
   protocol: "ui" | "agent" | "audio"
@@ -42,13 +43,88 @@ export const ws = writable<{ connected: boolean; lastError: string | null }>({
   lastError: null,
 })
 
-export const layout = writable<{ tree: LayoutTree | null; version: number }>({
+// Keep the writable store for backward compatibility, but sync to reactive state on every write
+const layoutWritable = writable<{ tree: LayoutTree | null; version: number }>({
   tree: null,
   version: 0,
 })
 
+export const layout: Writable<{ tree: LayoutTree | null; version: number }> = {
+  subscribe: layoutWritable.subscribe,
+  set(value) {
+    layoutWritable.set(value)
+    // Dispatch custom event for Svelte 5 reactivity
+    try { window.dispatchEvent(new CustomEvent('hwc-layout-update', { detail: value })) } catch(e) {}
+  },
+  update(fn) {
+    layoutWritable.update(fn)
+    const current = get(layoutWritable)
+    try { window.dispatchEvent(new CustomEvent('hwc-layout-update', { detail: current })) } catch(e) {}
+  },
+}
+
+export { layoutWritable }
+
 export const focus = writable<string>("root")
 export const ptyOutputs = writable<Map<string, string>>(new Map())
+
+let layoutVersion = 0
+
+// Apply a single layout operation to the tree
+function applyLayoutOp(tree: LayoutTree, op: {op: string; target_id?: string; direction?: string; content?: string; pty_id?: string; browser_id?: string}): LayoutTree {
+  if (op.op === 'split' && op.target_id && op.content) {
+    // Find target node and split it
+    const target = findNode(tree, op.target_id)
+    if (target && target.type === 'leaf') {
+      const direction = op.direction || 'h'
+      const newChildren: LayoutTree[] = [
+        { ...target },
+        {
+          id: target.id + '_right',
+          type: 'leaf',
+          content: op.content,
+          pty_id: op.pty_id,
+          browser_id: op.browser_id,
+          size: 0.5,
+        },
+      ]
+      // Update the target node to be a split
+      return updateNode(tree, op.target_id, {
+        type: 'split',
+        direction,
+        children: newChildren,
+        size: undefined,
+      })
+    }
+  }
+  return tree
+}
+
+// Find a node in the tree by ID
+function findNode(tree: LayoutTree, id: string): LayoutTree | null {
+  if (tree.id === id) return tree
+  if (tree.children) {
+    for (const child of tree.children) {
+      const found = findNode(child, id)
+      if (found) return found
+    }
+  }
+  return null
+}
+
+// Update a node in the tree (immutable)
+function updateNode(tree: LayoutTree, id: string, updates: Partial<LayoutTree>): LayoutTree {
+  if (tree.id === id) {
+    return { ...tree, ...updates }
+  }
+  if (tree.children) {
+    return {
+      ...tree,
+      children: tree.children.map(c => updateNode(c, id, updates)),
+    }
+  }
+  return tree
+}
 
 let socket: WebSocket | null = null
 const handlers: Map<string, Set<(data: unknown) => void>> = new Map()
@@ -69,12 +145,45 @@ export function connect(url: string = "ws://localhost:3005/ws") {
 
   socket.onmessage = (ev) => {
     const event: Event = JSON.parse(ev.data)
-    if (event.event === "layout.initial" || event.event === "layout.delta") {
-      layout.update((l) => ({
-        ...l,
-        tree: event.data?.tree as LayoutTree,
-        version: (event.data?.layout_version as number) || l.version + 1,
+    // Capture ALL events for debugging - add to window for cross-module access
+    const win = globalThis as typeof globalThis & { __wsEvents?: Event[] }
+    if (!win.__wsEvents) win.__wsEvents = []
+    win.__wsEvents.push(event)
+    console.log('[WS] RECV event:', event.event, 'data:', JSON.stringify(event.data)?.substring(0, 200), '| total events:', win.__wsEvents.length)
+    if (event.event === "layout.initial") {
+      // Full tree replace on initial
+      const newTree = event.data?.tree as LayoutTree
+      const newVersion = (event.data?.layout_version as number) || 1
+      console.log('[WS] layout.initial: version', newVersion, 'tree:', JSON.stringify(newTree)?.substring(0, 200))
+      layout.set({ tree: newTree, version: newVersion })
+      layoutVersion = newVersion
+      console.log('[WS] layout.initial set called, store version now:', newVersion)
+      // Dispatch custom DOM event for component reactivity
+      console.log('[WS] layout.initial: dispatching to layout.update handlers, count:', handlers.get('layout.update')?.size || 0)
+      window.dispatchEvent(new CustomEvent('hwc-layout-update', {
+        detail: { tree: newTree, version: newVersion }
       }))
+    } else if (event.event === "layout.delta") {
+      // Delta now contains full tree - use it directly
+      const d = event.data as {layout_version?: number, tree?: LayoutTree, ops?: Array<{op: string, target_id?: string, direction?: string, content?: string, pty_id?: string, browser_id?: string}>} | null
+      const newTree = d?.tree
+      const newVersion = d?.layout_version || layoutVersion + 1
+      console.log('[WS] layout.delta: version', newVersion, 'tree type:', newTree?.type, 'children:', newTree?.children?.length)
+      if (newTree) {
+        layout.set({ tree: newTree, version: newVersion })
+        layoutVersion = newVersion
+        console.log('[WS] layout.delta set called, store version now:', newVersion)
+        // Dispatch custom DOM event for component reactivity
+        const layoutHandlers = handlers.get('layout.update')
+        console.log('[WS] layout.delta: dispatching to layout.update handlers, count:', layoutHandlers?.size || 0)
+        if (layoutHandlers) {
+          window.dispatchEvent(new CustomEvent('hwc-layout-update', {
+            detail: { tree: newTree, version: newVersion }
+          }))
+        }
+      } else {
+        console.log('[WS] layout.delta: no tree in response')
+      }
     }
     if (event.protocol === "agent" && event.event === "pty.output") {
       const data = event.data as { pty_id: string; data: string }
@@ -85,8 +194,10 @@ export function connect(url: string = "ws://localhost:3005/ws") {
       })
     }
     const eventHandlers = handlers.get(event.event)
+    console.log('[WS] Looking for handler:', event.event, 'found:', eventHandlers?.size || 0)
     if (eventHandlers) {
-      for (const handler of eventHandlers) {
+      const handlersArr = Array.from(eventHandlers)
+      for (const handler of handlersArr) {
         handler(event.data)
       }
     }
@@ -118,6 +229,7 @@ export function on(event: string, handler: (data: unknown) => void): () => void 
     handlers.set(event, new Set())
   }
   handlers.get(event)!.add(handler)
+  console.log(`[WS] Handler registered for event: ${event}, total handlers for this event: ${handlers.get(event)!.size}`)
   return () => {
     const set = handlers.get(event)
     if (set) {

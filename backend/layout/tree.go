@@ -115,11 +115,12 @@ func (t *LayoutTree) applySplit(op Op) ([]Op, error) {
 			focused: origFocused,
 		},
 		{
-			ID:      node.ID + "_right",
-			Type:    "leaf",
-			Content: op.Content,
-			PTYID:   op.PTYID,
-			Size:    0.5,
+			ID:        node.ID + "_right",
+			Type:      "leaf",
+			Content:   op.Content,
+			PTYID:     op.PTYID,
+			BrowserID: op.BrowserID,
+			Size:      0.5,
 		},
 	}
 
@@ -151,11 +152,12 @@ func (t *LayoutTree) applyMount(op Op) ([]Op, error) {
 
 	// Create new leaf
 	newLeaf := LayoutTree{
-		ID:      "mount_" + node.ID,
-		Type:    "leaf",
-		Content: op.Content,
-		PTYID:   op.PTYID,
-		Size:    0.5,
+		ID:        "mount_" + node.ID,
+		Type:      "leaf",
+		Content:   op.Content,
+		PTYID:     op.PTYID,
+		BrowserID: op.BrowserID,
+		Size:      0.5,
 	}
 
 	// Convert parent to split if it's a leaf

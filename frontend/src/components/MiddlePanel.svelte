@@ -1,12 +1,45 @@
+<svelte:options runes={false} />
+
 <script lang="ts">
+  import { onMount } from "svelte"
   import Tile from "./Tile.svelte"
-  import { layout, send, focus } from "../stores/ws"
+  import { send, layout } from "../stores/ws"
+  import { get } from "svelte/store"
   import { workspaceStore, getFloatingTiles, isFloating, updateFloating, removeFloating } from "../stores/workspace"
   import type { FloatingTile } from "../stores/workspace"
   import type { LayoutTree } from "../stores/ws"
 
-  let wsState = $derived($workspaceStore)
-  let floatingTiles = $derived(Array.from(wsState.workspaces[wsState.activeWorkspace - 1].floating.values()))
+  // Local variables that the template reads
+  let currentTree: LayoutTree | null = null
+  let currentVersion = 0
+  let wsState = $workspaceStore
+  let floatingTiles: FloatingTile[] = []
+
+  $: wsState = $workspaceStore
+  $: floatingTiles = Array.from(wsState.workspaces[wsState.activeWorkspace - 1].floating.values())
+
+  // Listen for layout updates via DOM custom event
+  onMount(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail
+      if (detail) {
+        currentTree = detail.tree
+        currentVersion = detail.version
+      }
+    }
+    window.addEventListener('hwc-layout-update', handler)
+    // Initialize from store
+    const current = get(layout)
+    currentTree = current.tree
+    currentVersion = current.version
+    return () => window.removeEventListener('hwc-layout-update', handler)
+  })
+
+  // Also update when $workspaceStore changes
+  $: if ($workspaceStore) {
+    wsState = $workspaceStore
+    floatingTiles = Array.from(wsState.workspaces[wsState.activeWorkspace - 1].floating.values())
+  }
 
   // Find layout node by id for floating tile content
   function findNode(tree: LayoutTree | null, id: string): LayoutTree | null {
@@ -21,7 +54,7 @@
     return null
   }
 
-  let dropTargetActive = $state(false)
+  let dropTargetActive = false
 
   function handleDragOver(e: DragEvent) {
     e.preventDefault()
@@ -40,15 +73,10 @@
     dropTargetActive = false
     const filePath = e.dataTransfer?.getData("text/plain")
     if (!filePath) return
-
-    send({ protocol: "ui", method: "layout.update", params: {
-      op: "open", content: "editor", path: filePath
-    }})
+    send({ protocol: "ui", method: "layout.update", params: { op: "open", content: "editor", path: filePath }})
   }
 
-  // Floating tile drag state
-  let dragTile = $state<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null)
-  let dragTitle = $state<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null)
+  let dragTitle: { id: string; startX: number; startY: number; origX: number; origY: number } | null = null
 
   function onTitleMouseDown(e: MouseEvent, ft: FloatingTile) {
     if ((e.target as HTMLElement).closest("button")) return
@@ -57,7 +85,6 @@
   }
 
   function onBodyMouseDown(e: MouseEvent, ft: FloatingTile) {
-    // Bring to front: move to end of map
     workspaceStore.update(s => {
       const idx = s.activeWorkspace - 1
       const ws = s.workspaces[idx]
@@ -85,9 +112,7 @@
   function contentLabel(content: string): string {
     const labels: Record<string, string> = {
       "xterm": "Terminal", "editor": "Editor", "browser": "Browser",
-      "dash-overview": "Dashboard", "dash-filemanager": "Files",
-      "dash-observability": "Observability", "dash-analytics": "Analytics",
-      "dash-system-status": "System", "welcome": "Welcome",
+      "welcome": "Welcome",
     }
     return labels[content] || content
   }
@@ -116,14 +141,15 @@
   ondragleave={handleDragLeave}
   ondrop={handleDrop}
 >
-  <!-- Tiled layout -->
-  {#if $layout.tree}
-    <Tile node={$layout.tree} />
+<!-- Tiled layout -->
+  {#if currentTree}
+    <Tile node={currentTree} />
+    <div class="hidden" data-debug="tree-{currentTree.type}-{currentVersion}"></div>
   {:else}
     <div class="flex items-center justify-center h-full text-gray-500">
       <div class="text-center">
         <p class="text-lg font-bold text-gray-400">Agent-OS v1.2</p>
-        <p class="text-sm mt-2 text-gray-500">Connecting...</p>
+        <p class="text-sm mt-2 text-gray-500">Connecting... version: {currentVersion}</p>
       </div>
     </div>
   {/if}
@@ -135,13 +161,12 @@
       style="left: {ft.x}px; top: {ft.y}px; width: {ft.width}px; height: {ft.height}px;"
       onmousedown={(e) => onBodyMouseDown(e, ft)}
     >
-      <!-- Title bar (drag handle) -->
       <div
         class="flex items-center h-8 px-2 bg-white/[0.03] border-b border-white/[0.05] select-none cursor-grab active:cursor-grabbing"
         onmousedown={(e) => onTitleMouseDown(e, ft)}
       >
         <span class="flex-1 text-[11px] text-purple-300/80 font-mono truncate pl-1">
-          {contentLabel($layout.tree?.id === ft.id ? $layout.tree.content || '' : 'tile')}: {ft.id.slice(0, 8)}
+          {contentLabel(currentTree?.id === ft.id ? currentTree?.content || '' : 'tile')}: {ft.id.slice(0, 8)}
         </span>
         <button class="w-4 h-4 rounded-full bg-yellow-500/60 hover:bg-yellow-500 text-[9px] text-black/60 flex items-center justify-center ml-1.5" title="Minimize"
           onclick={() => toggleMinimize(ft)}>−</button>
@@ -151,9 +176,8 @@
           onclick={() => closeFloat(ft)}>×</button>
       </div>
 
-      <!-- Content -->
       {#if !ft.minimized}
-        {@const node = findNode($layout.tree, ft.id)}
+        {@const node = findNode(currentTree, ft.id)}
         {#if node}
           <div class="h-[calc(100%-2rem)] overflow-hidden">
             <Tile node={node} depth={0} />

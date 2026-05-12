@@ -71,9 +71,17 @@ func (m *Multiplexer) handleAppsLaunch(sess *Session, params json.RawMessage) {
 			return
 		}
 		sess.Send(Event{Protocol: "ui", Event: "apps.launch.response", Data: mustMarshal(map[string]interface{}{
-			"type":         "browser",
-			"browser_id":   browserSessionID,
-			"url":          "about:blank",
+			"type":       "browser",
+			"browser_id": browserSessionID,
+			"url":        "about:blank",
+		})})
+
+	case "file-manager", "agent", "dashboard", "audio":
+		// These are panel-based features, not tile-based apps
+		// Return success so the dock indicator updates, but no new tile is created
+		sess.Send(Event{Protocol: "ui", Event: "apps.launch.response", Data: mustMarshal(map[string]interface{}{
+			"type": p.Type,
+			"note": "panel feature - no tile launched",
 		})})
 
 	default:

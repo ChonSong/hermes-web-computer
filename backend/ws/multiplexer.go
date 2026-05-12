@@ -197,6 +197,8 @@ func (m *Multiplexer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Send initial layout state
+	// Reset layout to fresh leaf for each new session so splits work
+	m.layout = layout.NewRoot("xterm")
 	m.sendEvent(sess, Event{
 		Protocol: "ui",
 		Event:    "layout.initial",
@@ -365,11 +367,23 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 			return
 		}
 		m.state.LayoutVersion++
-		// Send delta to client
+		// Send delta with full tree to client (simpler than delta ops for now)
+		// The client will use the tree field to replace its layout entirely
+		type deltaResponse struct {
+			LayoutVersion int64           `json:"layout_version"`
+			Tree          *layout.LayoutTree `json:"tree"`
+			Ops           []layout.Op      `json:"ops"`
+		}
+		resp := deltaResponse{
+			LayoutVersion: m.state.LayoutVersion,
+			Tree:          m.layout,
+			Ops:           delta,
+		}
+		respBytes, _ := json.Marshal(resp)
 		m.sendEvent(sess, Event{
 			Protocol: "ui",
 			Event:    "layout.delta",
-			Data:     json.RawMessage(fmt.Sprintf(`{"layout_version":%d,"ops":%s}`, m.state.LayoutVersion, mustMarshal(delta))),
+			Data:     json.RawMessage(respBytes),
 		})
 		// Telemetry
 		if m.telemetry != nil {
