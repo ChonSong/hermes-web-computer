@@ -9,6 +9,8 @@
   import DashSystemStatus from "./DashSystemStatus.svelte"
   import { send, focus } from "../stores/ws"
   import type { LayoutTree } from "../stores/ws"
+  import { fade } from "svelte/transition"
+  import { cubicOut } from "svelte/easing"
 
   let { node, depth = 0 }: { node: LayoutTree; depth?: number } = $props()
 
@@ -54,6 +56,7 @@
         send({ protocol: "ui", method: "layout.update", params: { op: "fullscreen", target_id: node.id }})
       }
     }}
+    transition:fly={{ duration: 200, y: 8, opacity: 0.6, easing: cubicOut }}
   >
     {#if node.content === 'xterm'}
       <Terminal ptyId={node.pty_id} />
