@@ -3,13 +3,12 @@
 <script lang="ts">
   import { onMount } from "svelte"
   import Tile from "./Tile.svelte"
-  import { send, layout } from "../stores/ws"
-  import { get } from "svelte/store"
+  import { layout, send } from "../stores/ws"
   import { workspaceStore, getFloatingTiles, isFloating, updateFloating, removeFloating } from "../stores/workspace"
   import type { FloatingTile } from "../stores/workspace"
   import type { LayoutTree } from "../stores/ws"
 
-  // Local variables that the template reads
+  // Svelte 4 legacy mode — $layout auto-subscription
   let currentTree: LayoutTree | null = null
   let currentVersion = 0
   let wsState = $workspaceStore
@@ -18,28 +17,16 @@
   $: wsState = $workspaceStore
   $: floatingTiles = Array.from(wsState.workspaces[wsState.activeWorkspace - 1].floating.values())
 
-  // Listen for layout updates via DOM custom event
+  // Subscribe to layout store and update local variables
   onMount(() => {
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent).detail
-      if (detail) {
-        currentTree = detail.tree
-        currentVersion = detail.version
-      }
-    }
-    window.addEventListener('hwc-layout-update', handler)
-    // Initialize from store
-    const current = get(layout)
-    currentTree = current.tree
-    currentVersion = current.version
-    return () => window.removeEventListener('hwc-layout-update', handler)
+    console.log('[MiddlePanel] onMount: subscribing to layout store')
+    const unsub = layout.subscribe(v => {
+      console.log('[MiddlePanel] layout update:', v.version, v.tree?.type)
+      currentTree = v.tree
+      currentVersion = v.version
+    })
+    return unsub
   })
-
-  // Also update when $workspaceStore changes
-  $: if ($workspaceStore) {
-    wsState = $workspaceStore
-    floatingTiles = Array.from(wsState.workspaces[wsState.activeWorkspace - 1].floating.values())
-  }
 
   // Find layout node by id for floating tile content
   function findNode(tree: LayoutTree | null, id: string): LayoutTree | null {

@@ -1,5 +1,4 @@
 import { writable, type Writable, get } from "svelte/store"
-import { layoutState } from "./layout.svelte"
 
 export interface Envelope {
   protocol: "ui" | "agent" | "audio"
@@ -151,38 +150,17 @@ export function connect(url: string = "ws://localhost:3005/ws") {
     win.__wsEvents.push(event)
     console.log('[WS] RECV event:', event.event, 'data:', JSON.stringify(event.data)?.substring(0, 200), '| total events:', win.__wsEvents.length)
     if (event.event === "layout.initial") {
-      // Full tree replace on initial
       const newTree = event.data?.tree as LayoutTree
       const newVersion = (event.data?.layout_version as number) || 1
-      console.log('[WS] layout.initial: version', newVersion, 'tree:', JSON.stringify(newTree)?.substring(0, 200))
       layout.set({ tree: newTree, version: newVersion })
       layoutVersion = newVersion
-      console.log('[WS] layout.initial set called, store version now:', newVersion)
-      // Dispatch custom DOM event for component reactivity
-      console.log('[WS] layout.initial: dispatching to layout.update handlers, count:', handlers.get('layout.update')?.size || 0)
-      window.dispatchEvent(new CustomEvent('hwc-layout-update', {
-        detail: { tree: newTree, version: newVersion }
-      }))
     } else if (event.event === "layout.delta") {
-      // Delta now contains full tree - use it directly
-      const d = event.data as {layout_version?: number, tree?: LayoutTree, ops?: Array<{op: string, target_id?: string, direction?: string, content?: string, pty_id?: string, browser_id?: string}>} | null
+      const d = event.data as {layout_version?: number, tree?: LayoutTree} | null
       const newTree = d?.tree
       const newVersion = d?.layout_version || layoutVersion + 1
-      console.log('[WS] layout.delta: version', newVersion, 'tree type:', newTree?.type, 'children:', newTree?.children?.length)
       if (newTree) {
         layout.set({ tree: newTree, version: newVersion })
         layoutVersion = newVersion
-        console.log('[WS] layout.delta set called, store version now:', newVersion)
-        // Dispatch custom DOM event for component reactivity
-        const layoutHandlers = handlers.get('layout.update')
-        console.log('[WS] layout.delta: dispatching to layout.update handlers, count:', layoutHandlers?.size || 0)
-        if (layoutHandlers) {
-          window.dispatchEvent(new CustomEvent('hwc-layout-update', {
-            detail: { tree: newTree, version: newVersion }
-          }))
-        }
-      } else {
-        console.log('[WS] layout.delta: no tree in response')
       }
     }
     if (event.protocol === "agent" && event.event === "pty.output") {
