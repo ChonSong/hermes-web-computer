@@ -16,7 +16,7 @@ import (
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3001"
+		port = "3112"
 	}
 
 	audioURL := os.Getenv("FUN_AUDIO_WS")

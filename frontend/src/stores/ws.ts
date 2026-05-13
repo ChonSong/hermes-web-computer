@@ -134,7 +134,7 @@ function nextId(): string {
   return `req_${++reqId}`
 }
 
-export function connect(url: string = "ws://localhost:3005/ws") {
+export function connect(url: string = "ws://localhost:3112/ws") {
   if (socket?.readyState === WebSocket.OPEN) return
 
   socket = new WebSocket(url)
