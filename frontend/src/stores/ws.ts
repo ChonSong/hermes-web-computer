@@ -1,4 +1,5 @@
 import { writable, type Writable, get } from "svelte/store"
+import { layoutState } from "./layout.svelte"
 
 export interface Envelope {
   protocol: "ui" | "agent" | "audio"
@@ -153,6 +154,7 @@ export function connect(url: string = "ws://localhost:3005/ws") {
       const newTree = event.data?.tree as LayoutTree
       const newVersion = (event.data?.layout_version as number) || 1
       layout.set({ tree: newTree, version: newVersion })
+      layoutState.setLayout(newTree, newVersion)
       layoutVersion = newVersion
     } else if (event.event === "layout.delta") {
       const d = event.data as {layout_version?: number, tree?: LayoutTree} | null
@@ -160,6 +162,7 @@ export function connect(url: string = "ws://localhost:3005/ws") {
       const newVersion = d?.layout_version || layoutVersion + 1
       if (newTree) {
         layout.set({ tree: newTree, version: newVersion })
+        layoutState.setLayout(newTree, newVersion)
         layoutVersion = newVersion
       }
     }

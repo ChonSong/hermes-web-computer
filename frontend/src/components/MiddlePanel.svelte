@@ -1,32 +1,17 @@
-<svelte:options runes={false} />
-
 <script lang="ts">
-  import { onMount } from "svelte"
   import Tile from "./Tile.svelte"
-  import { layout, send } from "../stores/ws"
+  import { send } from "../stores/ws"
+  import { layoutState } from "../stores/layout.svelte"
   import { workspaceStore, getFloatingTiles, isFloating, updateFloating, removeFloating } from "../stores/workspace"
   import type { FloatingTile } from "../stores/workspace"
   import type { LayoutTree } from "../stores/ws"
 
-  // Svelte 4 legacy mode — $layout auto-subscription
-  let currentTree: LayoutTree | null = null
-  let currentVersion = 0
-  let wsState = $workspaceStore
-  let floatingTiles: FloatingTile[] = []
-
-  $: wsState = $workspaceStore
-  $: floatingTiles = Array.from(wsState.workspaces[wsState.activeWorkspace - 1].floating.values())
-
-  // Subscribe to layout store and update local variables
-  onMount(() => {
-    console.log('[MiddlePanel] onMount: subscribing to layout store')
-    const unsub = layout.subscribe(v => {
-      console.log('[MiddlePanel] layout update:', v.version, v.tree?.type)
-      currentTree = v.tree
-      currentVersion = v.version
-    })
-    return unsub
-  })
+  // Read from the reactive layout state (uses createSubscriber internally)
+  // This creates a proper signal dependency that Svelte 5 CAN track
+  let currentTree = $derived(layoutState.tree)
+  let currentVersion = $derived(layoutState.version)
+  let wsState = $derived($workspaceStore)
+  let floatingTiles = $derived(Array.from(wsState.workspaces[wsState.activeWorkspace - 1].floating.values()))
 
   // Find layout node by id for floating tile content
   function findNode(tree: LayoutTree | null, id: string): LayoutTree | null {
@@ -41,7 +26,7 @@
     return null
   }
 
-  let dropTargetActive = false
+  let dropTargetActive = $state(false)
 
   function handleDragOver(e: DragEvent) {
     e.preventDefault()
@@ -63,7 +48,7 @@
     send({ protocol: "ui", method: "layout.update", params: { op: "open", content: "editor", path: filePath }})
   }
 
-  let dragTitle: { id: string; startX: number; startY: number; origX: number; origY: number } | null = null
+  let dragTitle = $state<{ id: string; startX: number; startY: number; origX: number; origY: number } | null>(null)
 
   function onTitleMouseDown(e: MouseEvent, ft: FloatingTile) {
     if ((e.target as HTMLElement).closest("button")) return
