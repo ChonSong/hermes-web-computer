@@ -314,6 +314,7 @@
         class="px-3 py-1.5 text-xs font-medium transition-colors rounded-lg
           {activeTab === 'settings' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
         onclick={() => activeTab = "settings"}
+        aria-label="Settings tab"
       >
         ⚙️
       </button>

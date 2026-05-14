@@ -9,3 +9,5 @@ state.db
 backend/go.sum
 frontend/package-lock.json
 backend/agent-os
+test-results/
+test-results/

@@ -106,13 +106,7 @@
           text-lg transition-all duration-150
           {hoveredApp === item.id ? 'scale-110' : 'scale-100'}
           {activeApp === item.id ? 'bg-purple-500/20 hover:bg-purple-500/30' : 'hover:bg-white/10'}"
-        onclick={() => {
-          if (item.isPanelFeature) {
-            handleDockPanelClick(item)
-          } else {
-            handleLaunch(item)
-          }
-        }}
+        onclick={() => handleLaunch(item)}
         onmouseenter={() => hoveredApp = item.id}
         onmouseleave={() => hoveredApp = null}
         aria-label={item.label}
