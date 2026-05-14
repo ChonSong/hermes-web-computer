@@ -272,8 +272,10 @@ export function sessionUpdate(id: string, pinned?: boolean, title?: string): str
 }
 
 // Chat helpers
-export function chatSend(message: string): string {
-  return send({ protocol: "agent", method: "chat.send", params: { message } })
+export function chatSend(message: string, sessionId?: string): string {
+  const params: Record<string, string> = { message }
+  if (sessionId) params.session_id = sessionId
+  return send({ protocol: "agent", method: "chat.send", params })
 }
 
 // Audio helpers

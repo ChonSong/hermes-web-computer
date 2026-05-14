@@ -1,6 +1,7 @@
 /**
  * sessions.svelte.ts — Svelte 5 reactive session store
  * Mirrors hermes-webui session state in the HWC WS layer.
+ * Handles streaming tokens, tool calls, and persistent message history.
  */
 import { send, on } from "./ws"
 
@@ -38,8 +39,37 @@ class SessionStore {
   loading = $state(false)
   error = $state<string | null>(null)
 
+  // Streaming accumulation — key by sessionId
+  private _bufText = $state<Map<string, string>>(new Map())
+  private _bufToolCalls = $state<Map<string, any[]>>(new Map())
+
   get active() {
     return this.sessions.find(s => s.session_id === this.activeId) ?? null
+  }
+
+  /** Append a message to a session's message list (in-place mutation for reactivity) */
+  private _appendMsg(sid: string, role: SessionMessage["role"], content: string, toolCalls?: any[]) {
+    this.sessions = this.sessions.map(s => {
+      if (s.session_id !== sid) return s
+      const msgs = [...(s.messages ?? []), {
+        role,
+        content,
+        ...(toolCalls ? { tool_calls: toolCalls } : {}),
+      } as SessionMessage]
+      return { ...s, messages: msgs, updated_at: Date.now() }
+    })
+    // Update activeSession too
+    if (this.activeId === sid) {
+      this.activeSession = this.sessions.find(s => s.session_id === sid) ?? null
+    }
+  }
+
+  /** Get current streaming buffer for a session */
+  getBuf(sid: string): { text: string; toolCalls: any[] } {
+    return {
+      text: this._bufText.get(sid) ?? "",
+      toolCalls: this._bufToolCalls.get(sid) ?? [],
+    }
   }
 
   async refresh() {
@@ -53,11 +83,7 @@ class SessionStore {
         resolve()
       })
       send({ protocol: "ui", method: "session.list" })
-      // Timeout fallback
-      setTimeout(() => {
-        this.loading = false
-        resolve()
-      }, 5000)
+      setTimeout(() => { this.loading = false; resolve() }, 5000)
     })
   }
 
@@ -89,7 +115,6 @@ class SessionStore {
         const sess = data as Session
         this.activeId = id
         this.activeSession = sess
-        // Update in list too
         this.sessions = this.sessions.map(s => s.session_id === id ? sess : s)
         resolve(sess)
       })
@@ -105,7 +130,7 @@ class SessionStore {
   async delete(id: string): Promise<boolean> {
     this.error = null
     return new Promise((resolve) => {
-      const cleanup = on("session.delete.ok", (data: any) => {
+      const cleanup = on("session.delete.ok", (_data: any) => {
         cleanup()
         this.sessions = this.sessions.filter(s => s.session_id !== id)
         if (this.activeId === id) {
@@ -134,6 +159,87 @@ class SessionStore {
     this.activeId = id
     this.activeSession = this.sessions.find(s => s.session_id === id) ?? null
     this.load(id)
+  }
+
+  /**
+   * send — streaming-aware chat message.
+   * Handles: optimistic user message, token accumulation, tool call cards,
+   * tool result messages, and final reply assembly.
+   */
+  async send(content: string): Promise<void> {
+    this.error = null
+    const sid = this.activeId
+    if (!sid) return
+
+    // 1. Optimistic user message
+    this._appendMsg(sid, "user", content)
+
+    // 2. Clear buffers for this session
+    this._bufText.set(sid, "")
+    this._bufToolCalls.set(sid, [])
+
+    return new Promise((resolve) => {
+      let pendingText = ""
+      let pendingToolCalls: any[] = []
+
+      // Flush accumulated text as a completed assistant message
+      const flush = () => {
+        if (pendingText || pendingToolCalls.length > 0) {
+          this._appendMsg(sid, "assistant", pendingText,
+            pendingToolCalls.length > 0 ? pendingToolCalls : undefined)
+          pendingText = ""
+          pendingToolCalls = []
+        }
+      }
+
+      const cleanupAll = () => {
+        this._bufText.delete(sid)
+        this._bufToolCalls.delete(sid)
+      }
+
+      // --- Token events ---
+      const t1 = on("chat.token", (data: any) => {
+        const tok = (data as any)?.content ?? ""
+        pendingText += tok
+        this._bufText.set(sid, pendingText)
+      })
+
+      // --- Reasoning events (flush text first) ---
+      const t2 = on("chat.reasoning", (_data: any) => {
+        flush() // flush text before showing reasoning
+      })
+
+      // --- Tool call events (flush text, buffer tool calls) ---
+      const t3 = on("chat.tool_call", (data: any) => {
+        flush()
+        pendingToolCalls.push(data)
+        const existing = this._bufToolCalls.get(sid) ?? []
+        this._bufToolCalls.set(sid, [...existing, data])
+      })
+
+      // --- Tool result events ---
+      const t4 = on("chat.tool_result", (data: any) => {
+        const result = (data as any)?.result ?? ""
+        this._appendMsg(sid, "tool", result)
+      })
+
+      // --- Final reply ---
+      const t5 = on("chat.reply", (_data: any) => {
+        flush()
+        cleanupAll(); t1(); t2(); t3(); t4(); t5()
+        resolve()
+      })
+
+      // --- Error ---
+      const t6 = on("chat.error", (data: any) => {
+        flush()
+        this.error = (data as any)?.message ?? "Unknown error"
+        cleanupAll(); t1(); t2(); t3(); t4(); t5(); t6()
+        resolve()
+      })
+
+      send({ protocol: "agent", method: "chat.send", params: { message: content, session_id: sid } })
+    })
   }
 }
 
