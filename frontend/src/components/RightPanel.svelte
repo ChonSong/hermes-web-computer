@@ -6,9 +6,11 @@
   import CronPanel from "./CronPanel.svelte"
   import MemoryPanel from "./MemoryPanel.svelte"
   import SettingsPanel from "./SettingsPanel.svelte"
+  import ConfigPanel from "./ConfigPanel.svelte"
+  import ObservabilityPanel from "./ObservabilityPanel.svelte"
 
-  // Tab state: Chat | Profiles | Skills | Crons | Memory | Settings
-  type TabId = "chat" | "profiles" | "skills" | "crons" | "memory" | "settings"
+  // Tab state: Chat | Profiles | Skills | Crons | Memory | Settings | Config | Observability
+  type TabId = "chat" | "profiles" | "skills" | "crons" | "memory" | "settings" | "config" | "observability"
   let activeTab = $state<TabId>("chat")
 
   // Chat state (kept for chat tab)
@@ -183,6 +185,8 @@
       else if (detail.panel === "crons") activeTab = "crons"
       else if (detail.panel === "memory") activeTab = "memory"
       else if (detail.panel === "settings") activeTab = "settings"
+      else if (detail.panel === "config") activeTab = "config"
+      else if (detail.panel === "observability") activeTab = "observability"
     }
     window.addEventListener("hwc-dock-panel", handleDockPanel)
 
@@ -313,6 +317,20 @@
       >
         ⚙️
       </button>
+      <button
+        class="px-3 py-1.5 text-xs font-medium transition-colors rounded-lg
+          {activeTab === 'config' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
+        onclick={() => activeTab = "config"}
+      >
+        🔧 Config
+      </button>
+      <button
+        class="px-3 py-1.5 text-xs font-medium transition-colors rounded-lg
+          {activeTab === 'observability' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
+        onclick={() => activeTab = "observability"}
+      >
+        📊 Observe
+      </button>
     </div>
     <button
       class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5 shrink-0"
@@ -424,6 +442,10 @@
       <MemoryPanel />
     {:else if activeTab === "settings"}
       <SettingsPanel />
+    {:else if activeTab === "config"}
+      <ConfigPanel />
+    {:else if activeTab === "observability"}
+      <ObservabilityPanel />
     {/if}
   </div>
 </div>

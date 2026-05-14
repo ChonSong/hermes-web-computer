@@ -382,4 +382,56 @@ export function memoryWrite(key: string, value: string): string {
   return send({ protocol: "agent", method: "memory.write", params: { key, value } })
 }
 
+// Config helpers
+export function configGet(): string {
+  return send({ protocol: "ui", method: "config.get" })
+}
+
+export function configSet(key: string, value: unknown): string {
+  return send({ protocol: "ui", method: "config.set", params: { key, value } })
+}
+
+export function configDelete(key: string): string {
+  return send({ protocol: "ui", method: "config.delete", params: { key } })
+}
+
+export function configList(): string {
+  return send({ protocol: "ui", method: "config.list" })
+}
+
+// Env helpers
+export function envList(): string {
+  return send({ protocol: "ui", method: "env.list" })
+}
+
+export function envSet(key: string, value: string): string {
+  return send({ protocol: "ui", method: "env.set", params: { key, value } })
+}
+
+export function envDelete(key: string): string {
+  return send({ protocol: "ui", method: "env.delete", params: { key } })
+}
+
+// System helpers
+export function systemRestart(): string {
+  return send({ protocol: "ui", method: "system.restart" })
+}
+
+// Docker helpers
+export function dockerList(): string {
+  return send({ protocol: "ui", method: "docker.list" })
+}
+
+export function dockerContainerInfo(id: string): string {
+  return send({ protocol: "ui", method: "docker.container_info", params: { id } })
+}
+
+export function dockerContainerLogs(id: string, tail?: number): string {
+  return send({ protocol: "ui", method: "docker.container_logs", params: { id, tail: tail ?? 100 } })
+}
+
+export function dockerContainerStats(id: string): string {
+  return send({ protocol: "ui", method: "docker.container_stats", params: { id } })
+}
+
 // Don't auto-connect - let main.ts call connect()

@@ -19,9 +19,11 @@ import (
 
 	"nhooyr.io/websocket"
 
+	"hermes-web-computer/backend/docker"
 	"hermes-web-computer/backend/agent"
 	"hermes-web-computer/backend/audio"
 	"hermes-web-computer/backend/browser"
+	"hermes-web-computer/backend/config"
 	"hermes-web-computer/backend/layout"
 	"hermes-web-computer/backend/pty"
 	"hermes-web-computer/backend/security"
@@ -63,6 +65,22 @@ type Multiplexer struct {
 	httpClient *http.Client
 	contextMgr *ContextManager // tracks focused tile for agent context awareness
 	sessionStore *session.Store
+	configMgr   *config.Manager
+	dockerMgr   *docker.Manager
+}
+
+// SetConfigManager attaches the config manager to the multiplexer.
+func (m *Multiplexer) SetConfigManager(cm *config.Manager) {
+	m.mu.Lock()
+	m.configMgr = cm
+	m.mu.Unlock()
+}
+
+// SetDockerManager attaches the docker manager to the multiplexer.
+func (m *Multiplexer) SetDockerManager(dm *docker.Manager) {
+	m.mu.Lock()
+	m.dockerMgr = dm
+	m.mu.Unlock()
 }
 
 // Session represents a single WebSocket connection.
@@ -619,6 +637,271 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 			m.sessionStore.Pin(params.ID, *params.Pinned)
 		}
 		m.sendEvent(sess, Event{Protocol: "ui", Event: "session.update.ok", Data: json.RawMessage(mustMarshal(params))})
+
+	// ---- Docker management ----
+	case "docker.list":
+		if m.dockerMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(`{"message":"docker manager not available"}`)})
+			return
+		}
+		ctx := context.Background()
+		containers, err := m.dockerMgr.ListContainers(ctx)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.list.response", Data: json.RawMessage(mustMarshal(map[string]interface{}{"containers": containers}))})
+
+	case "docker.stats":
+		var params struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.ID == "" {
+			return
+		}
+		ctx := context.Background()
+		stats, err := m.dockerMgr.GetStats(ctx, params.ID)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.stats.response", Data: json.RawMessage(mustMarshal(stats))})
+
+	case "docker.start":
+		var params struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.ID == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.StartContainer(ctx, params.ID); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.start.ok", Data: json.RawMessage(fmt.Sprintf(`{"id":%s}`, mustMarshal(params.ID)))})
+
+	case "docker.stop":
+		var params struct {
+			ID     string `json:"id"`
+			Timeout *int   `json:"timeout,omitempty"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.ID == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.StopContainer(ctx, params.ID, params.Timeout); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.stop.ok", Data: json.RawMessage(fmt.Sprintf(`{"id":%s}`, mustMarshal(params.ID)))})
+
+	case "docker.restart":
+		var params struct {
+			ID     string `json:"id"`
+			Timeout *int   `json:"timeout,omitempty"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.ID == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.RestartContainer(ctx, params.ID, params.Timeout); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.restart.ok", Data: json.RawMessage(fmt.Sprintf(`{"id":%s}`, mustMarshal(params.ID)))})
+
+	case "docker.remove":
+		var params struct {
+			ID            string `json:"id"`
+			Force         bool   `json:"force,omitempty"`
+			RemoveVolumes bool   `json:"remove_volumes,omitempty"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.ID == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.RemoveContainer(ctx, params.ID, params.Force, params.RemoveVolumes); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.remove.ok", Data: json.RawMessage(fmt.Sprintf(`{"id":%s}`, mustMarshal(params.ID)))})
+
+	case "docker.logs":
+		var params struct {
+			ID   string `json:"id"`
+			Tail string `json:"tail,omitempty"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.ID == "" {
+			return
+		}
+		ctx := context.Background()
+		logs, err := m.dockerMgr.GetLogs(ctx, params.ID, params.Tail)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.logs.response", Data: json.RawMessage(fmt.Sprintf(`{"id":%s,"logs":%s}`, mustMarshal(params.ID), mustMarshal(logs)))})
+
+	// ---- Config management ----
+	case "config.get":
+		if m.configMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "config.get.error", Data: json.RawMessage(`{"message":"config manager not available"}`)})
+			return
+		}
+		data, err := m.configMgr.ToJSON()
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "config.get.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "config.get", Data: json.RawMessage(data)})
+
+	case "config.set":
+		if m.configMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "config.set.error", Data: json.RawMessage(`{"message":"config manager not available"}`)})
+			return
+		}
+		var params struct {
+			Key   string      `json:"key"`
+			Value interface{} `json:"value"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if params.Key == "" {
+			sess.Send(Event{Protocol: "ui", Event: "config.set.error", Data: json.RawMessage(`{"message":"key is required"}`)})
+			return
+		}
+		if err := m.configMgr.Set(params.Key, params.Value); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "config.set.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if err := m.configMgr.Save(); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "config.set.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "config.set.ok", Data: json.RawMessage(mustMarshal(params))})
+
+	case "config.delete":
+		if m.configMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "config.delete.error", Data: json.RawMessage(`{"message":"config manager not available"}`)})
+			return
+		}
+		var params struct {
+			Key string `json:"key"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if params.Key == "" {
+			sess.Send(Event{Protocol: "ui", Event: "config.delete.error", Data: json.RawMessage(`{"message":"key is required"}`)})
+			return
+		}
+		if err := m.configMgr.Delete(params.Key); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "config.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if err := m.configMgr.Save(); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "config.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "config.delete.ok", Data: json.RawMessage(mustMarshal(params))})
+
+	// ---- Env management ----
+	case "env.list":
+		if m.configMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "env.list.error", Data: json.RawMessage(`{"message":"config manager not available"}`)})
+			return
+		}
+		envs := m.configMgr.EnvList()
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "env.list", Data: json.RawMessage(mustMarshal(map[string]interface{}{"env": envs}))})
+
+	case "env.set":
+		if m.configMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "env.set.error", Data: json.RawMessage(`{"message":"config manager not available"}`)})
+			return
+		}
+		var params struct {
+			Key   string `json:"key"`
+			Value string `json:"value"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if params.Key == "" {
+			sess.Send(Event{Protocol: "ui", Event: "env.set.error", Data: json.RawMessage(`{"message":"key is required"}`)})
+			return
+		}
+		if err := m.configMgr.EnvSet(params.Key, params.Value); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "env.set.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if err := m.configMgr.Save(); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "env.set.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "env.set.ok", Data: json.RawMessage(mustMarshal(params))})
+
+	case "env.delete":
+		if m.configMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "env.delete.error", Data: json.RawMessage(`{"message":"config manager not available"}`)})
+			return
+		}
+		var params struct {
+			Key string `json:"key"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if params.Key == "" {
+			sess.Send(Event{Protocol: "ui", Event: "env.delete.error", Data: json.RawMessage(`{"message":"key is required"}`)})
+			return
+		}
+		if err := m.configMgr.EnvDelete(params.Key); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "env.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if err := m.configMgr.Save(); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "env.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "env.delete.ok", Data: json.RawMessage(mustMarshal(params))})
+
+	// ---- System restart ----
+	case "system.restart":
+		if m.configMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "system.restart.error", Data: json.RawMessage(`{"message":"config manager not available"}`)})
+			return
+		}
+		if err := m.configMgr.RestartSignal(); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "system.restart.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.restart.ok", Data: json.RawMessage(`{"message":"restart signal sent"}`)})
 	}
 }
 

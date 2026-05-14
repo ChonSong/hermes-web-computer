@@ -10,6 +10,10 @@ export default defineConfig({
         target: "ws://localhost:3113",
         ws: true,
       },
+      "/v1/models": {
+        target: "http://localhost:8642",
+        changeOrigin: true,
+      },
     },
   },
   build: {
