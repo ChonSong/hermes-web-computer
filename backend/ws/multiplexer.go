@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"sync"
 	"syscall"
@@ -20,6 +21,7 @@ import (
 	"hermes-web-computer/backend/layout"
 	"hermes-web-computer/backend/pty"
 	"hermes-web-computer/backend/security"
+	"hermes-web-computer/backend/session"
 	"hermes-web-computer/backend/state"
 	"hermes-web-computer/backend/telemetry"
 
@@ -58,6 +60,7 @@ type Multiplexer struct {
 	hermesURL  string // Hermes Agent API endpoint
 	httpClient *http.Client
 	contextMgr *ContextManager // tracks focused tile for agent context awareness
+	sessionStore *session.Store
 }
 
 // Session represents a single WebSocket connection.
@@ -104,7 +107,27 @@ func NewMultiplexer() *Multiplexer {
 		m.telemetry = tb
 		m.syncer = telemetry.NewSyncer(tb, "")
 	}
+	// Init session store
+	homeDir, _ = os.UserHomeDir()
+	storePath := os.Getenv("AGENT_OS_STATE_DIR")
+	if storePath == "" {
+		storePath = filepath.Join(homeDir, ".agent-os")
+	}
+	store, err := session.NewStore(storePath)
+	if err != nil {
+		log.Printf("session store init error: %v (continuing without sessions)", err)
+	} else {
+		m.sessionStore = store
+		log.Printf("session store initialized at %s", storePath)
+	}
 	return m
+}
+
+// SetSessionStore attaches a session store to the multiplexer.
+func (m *Multiplexer) SetSessionStore(store *session.Store) {
+	m.mu.Lock()
+	m.sessionStore = store
+	m.mu.Unlock()
 }
 
 // SetAudioBridge attaches the audio bridge to the multiplexer.
@@ -505,6 +528,95 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 
 	case "ui.focus.change":
 		m.handleFocusChange(sess, env.Params, sessionID)
+
+	// ---- Session management ----
+	case "session.new":
+		var params struct {
+			Workspace string `json:"workspace"`
+			Model     string `json:"model"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if params.Workspace == "" {
+			home, _ := os.UserHomeDir()
+			params.Workspace = filepath.Join(home, "workspace")
+		}
+		if params.Model == "" {
+			params.Model = "hermes-agent"
+		}
+		if m.sessionStore == nil {
+			m.sendEvent(sess, Event{Protocol: "ui", Event: "session.new.error", Data: json.RawMessage(`{"message":"session store not available"}`)})
+			return
+		}
+		storeSession, err := m.sessionStore.New(params.Workspace, params.Model)
+		if err != nil {
+			m.sendEvent(sess, Event{Protocol: "ui", Event: "session.new.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "session.new.ok", Data: json.RawMessage(mustMarshal(storeSession.Compact()))})
+
+	case "session.list":
+		if m.sessionStore == nil {
+			sess.Send(Event{Protocol: "ui", Event: "error", Data: json.RawMessage(`{"message":"session store not available"}`)})
+			return
+		}
+		list, err := m.sessionStore.AllCompact()
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "session.list", Data: json.RawMessage(mustMarshal(map[string]interface{}{"sessions": list}))})
+
+	case "session.get":
+		var params struct {
+			ID string `json:"id"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if m.sessionStore == nil || params.ID == "" {
+			return
+		}
+		s, err := m.sessionStore.Get(params.ID)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "session.get.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "session.get", Data: json.RawMessage(mustMarshal(s))})
+
+	case "session.delete":
+		var params struct {
+			ID string `json:"id"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if m.sessionStore == nil || params.ID == "" {
+			return
+		}
+		if err := m.sessionStore.Delete(params.ID); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "session.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "session.delete.ok", Data: json.RawMessage(fmt.Sprintf(`{"id":%s}`, mustMarshal(params.ID)))})
+
+	case "session.update":
+		var params struct {
+			ID     string `json:"id"`
+			Pinned *bool  `json:"pinned,omitempty"`
+			Title  string `json:"title,omitempty"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if m.sessionStore == nil || params.ID == "" {
+			return
+		}
+		if params.Pinned != nil {
+			m.sessionStore.Pin(params.ID, *params.Pinned)
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "session.update.ok", Data: json.RawMessage(mustMarshal(params))})
 	}
 }
 
