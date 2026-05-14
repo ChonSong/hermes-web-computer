@@ -1,14 +1,13 @@
 <script lang="ts">
   import FileTree from "./FileTree.svelte"
   import AppLauncher from "./AppLauncher.svelte"
-  import { sendOp, on, appsLaunch, fsRead } from "../stores/ws"
+  import SessionsPanel from "./SessionsPanel.svelte"
+  import { sendOp, appsLaunch, fsRead } from "../stores/ws"
 
-  let activeTab = $state<"files" | "apps">("files")
+  let activeTab = $state<"files" | "apps" | "sessions">("sessions")
   let collapsed = $state(false)
 
-  function handleFileOpen(event: CustomEvent<{ path: string }>) {
-    const path = event.detail.path
-    // Create an editor tile in the layout tree
+  function handleFileOpen(path: string) {
     sendOp({
       op: "split",
       target_id: "root",
@@ -16,7 +15,6 @@
       content: "editor",
       path: path,
     })
-    // Read the file content to send to the editor
     fsRead(path)
   }
 
@@ -36,17 +34,24 @@
   <div class="flex shrink-0 px-2 pt-2 gap-1">
     <button
       class="flex-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-lg
+        {activeTab === 'sessions' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
+      onclick={() => activeTab = "sessions"}
+    >
+      💬
+    </button>
+    <button
+      class="flex-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-lg
         {activeTab === 'files' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
       onclick={() => activeTab = "files"}
     >
-      📁 Files
+      📁
     </button>
     <button
       class="flex-1 px-3 py-1.5 text-sm font-medium transition-colors rounded-lg
         {activeTab === 'apps' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
       onclick={() => activeTab = "apps"}
     >
-      🚀 Apps
+      🚀
     </button>
     <button
       class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5"
@@ -59,9 +64,11 @@
 
   <!-- Content -->
   <div class="flex-1 overflow-y-auto px-1 pb-1">
-    {#if activeTab === "files"}
-      <FileTree on:file:open={handleFileOpen} />
-    {:else}
+    {#if activeTab === "sessions"}
+      <SessionsPanel />
+    {:else if activeTab === "files"}
+      <FileTree on:file:open={(e) => handleFileOpen(e.detail.path)} />
+    {:else if activeTab === "apps"}
       <AppLauncher on:launch={handleLaunch} />
     {/if}
   </div>

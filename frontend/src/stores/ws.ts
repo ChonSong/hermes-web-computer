@@ -134,7 +134,7 @@ function nextId(): string {
   return `req_${++reqId}`
 }
 
-export function connect(url: string = "ws://localhost:3112/ws") {
+export function connect(url: string = "ws://localhost:3113/ws") {
   if (socket?.readyState === WebSocket.OPEN) return
 
   socket = new WebSocket(url)
@@ -248,6 +248,27 @@ export function appsLaunch(type: string, path?: string): string {
   const params: Record<string, string> = { type }
   if (path) params.path = path
   return send({ protocol: "ui", method: "apps.launch", params })
+}
+
+// Session helpers
+export function sessionNew(workspace?: string, model?: string): string {
+  return send({ protocol: "ui", method: "session.new", params: { workspace, model } })
+}
+
+export function sessionList(): string {
+  return send({ protocol: "ui", method: "session.list" })
+}
+
+export function sessionGet(id: string): string {
+  return send({ protocol: "ui", method: "session.get", params: { id } })
+}
+
+export function sessionDelete(id: string): string {
+  return send({ protocol: "ui", method: "session.delete", params: { id } })
+}
+
+export function sessionUpdate(id: string, pinned?: boolean, title?: string): string {
+  return send({ protocol: "ui", method: "session.update", params: { id, pinned, title } })
 }
 
 // Chat helpers

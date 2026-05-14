@@ -2,6 +2,7 @@
   import Terminal from "./Terminal.svelte"
   import Monaco from "./Monaco.svelte"
   import Browser from "./Browser.svelte"
+  import ChatPanel from "./ChatPanel.svelte"
   import DashOverview from "./DashOverview.svelte"
   import DashFileManager from "./DashFileManager.svelte"
   import DashObservability from "./DashObservability.svelte"
@@ -64,6 +65,8 @@
       <Monaco filePath={node.path} />
     {:else if node.content === 'browser'}
       <Browser id={node.id} browserId={node.browser_id ?? ''} />
+    {:else if node.content === 'chat'}
+      <ChatPanel />
     {:else if node.content === 'dash-overview'}
       <DashOverview />
     {:else if node.content === 'dash-filemanager'}
