@@ -434,4 +434,41 @@ export function dockerContainerStats(id: string): string {
   return send({ protocol: "ui", method: "docker.container_stats", params: { id } })
 }
 
+// MCP helpers
+export function mcpList(): string {
+  return send({ protocol: "agent", method: "mcp.list" })
+}
+
+export function mcpConnect(name: string, command: string, args?: string[]): string {
+  return send({ protocol: "agent", method: "mcp.connect", params: { name, command, args: args ?? [] } })
+}
+
+export function mcpDisconnect(name: string): string {
+  return send({ protocol: "agent", method: "mcp.disconnect", params: { name } })
+}
+
+export function mcpToolsList(serverName: string): string {
+  return send({ protocol: "agent", method: "mcp.tools.list", params: { server_name: serverName } })
+}
+
+export function mcpToolsCall(serverName: string, toolName: string, toolArgs?: Record<string, unknown>): string {
+  return send({ protocol: "agent", method: "mcp.tools.call", params: { server_name: serverName, tool_name: toolName, arguments: toolArgs ?? {} } })
+}
+
+export function mcpResourcesList(serverName: string): string {
+  return send({ protocol: "agent", method: "mcp.resources.list", params: { server_name: serverName } })
+}
+
+export function mcpResourcesRead(serverName: string, uri: string): string {
+  return send({ protocol: "agent", method: "mcp.resources.read", params: { server_name: serverName, uri } })
+}
+
+export function mcpPromptsList(serverName: string): string {
+  return send({ protocol: "agent", method: "mcp.prompts.list", params: { server_name: serverName } })
+}
+
+export function mcpPromptsGet(serverName: string, name: string, promptArgs?: Record<string, unknown>): string {
+  return send({ protocol: "agent", method: "mcp.prompts.get", params: { server_name: serverName, name, arguments: promptArgs ?? {} } })
+}
+
 // Don't auto-connect - let main.ts call connect()

@@ -25,6 +25,7 @@ import (
 	"hermes-web-computer/backend/browser"
 	"hermes-web-computer/backend/config"
 	"hermes-web-computer/backend/layout"
+	"hermes-web-computer/backend/mcp"
 	"hermes-web-computer/backend/pty"
 	"hermes-web-computer/backend/security"
 	"hermes-web-computer/backend/session"
@@ -67,6 +68,7 @@ type Multiplexer struct {
 	sessionStore *session.Store
 	configMgr   *config.Manager
 	dockerMgr   *docker.Manager
+	mcpMgr      *mcp.Manager
 }
 
 // SetConfigManager attaches the config manager to the multiplexer.
@@ -1165,6 +1167,34 @@ func (m *Multiplexer) routeAgent(env Envelope, sess *Session, sessionID string) 
 
 	case "memory.write":
 		m.handleMemoryWrite(sess, env.Params)
+
+	// ---- MCP handlers ----
+	case "mcp.list":
+		m.handleMCPList(sess, env.Params)
+
+	case "mcp.connect":
+		m.handleMCPConnect(sess, env.Params)
+
+	case "mcp.disconnect":
+		m.handleMCPDisconnect(sess, env.Params)
+
+	case "mcp.tools.list":
+		m.handleMCPToolsList(sess, env.Params)
+
+	case "mcp.tools.call":
+		m.handleMCPToolsCall(sess, env.Params)
+
+	case "mcp.resources.list":
+		m.handleMCPResourcesList(sess, env.Params)
+
+	case "mcp.resources.read":
+		m.handleMCPResourcesRead(sess, env.Params)
+
+	case "mcp.prompts.list":
+		m.handleMCPPromptsList(sess, env.Params)
+
+	case "mcp.prompts.get":
+		m.handleMCPPromptsGet(sess, env.Params)
 	}
 }
 
@@ -1612,5 +1642,228 @@ func (m *Multiplexer) handleMemoryWrite(sess *Session, params json.RawMessage) {
 	}
 	// TODO: implement actual memory write
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.write", Data: json.RawMessage(`{"success":true}`)})
+}
+
+// ---- MCP handlers ----
+
+func (m *Multiplexer) handleMCPList(sess *Session, params json.RawMessage) {
+	if m.mcpMgr == nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.list", Data: json.RawMessage(`{"servers":[],"error":"mcp manager not available"}`)})
+		return
+	}
+	clients := m.mcpMgr.ListClients()
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.list", Data: json.RawMessage(mustMarshal(map[string]interface{}{"servers": clients}))})
+}
+
+func (m *Multiplexer) handleMCPConnect(sess *Session, params json.RawMessage) {
+	var p struct {
+		Name    string   `json:"name"`
+		Command string   `json:"command"`
+		Args    []string `json:"args,omitempty"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if p.Name == "" || p.Command == "" {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.connect", Data: json.RawMessage(`{"success":false,"error":"name and command are required"}`)})
+		return
+	}
+	if m.mcpMgr == nil {
+		m.mcpMgr = mcp.NewManager()
+	}
+	client := m.mcpMgr.AddClient(p.Name, p.Command, p.Args...)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	if err := client.Start(ctx); err != nil {
+		m.mcpMgr.RemoveClient(p.Name)
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.connect", Data: json.RawMessage(fmt.Sprintf(`{"success":false,"error":"%s"}`, err.Error()))})
+		return
+	}
+	if _, err := client.Initialize(ctx); err != nil {
+		client.Stop()
+		m.mcpMgr.RemoveClient(p.Name)
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.connect", Data: json.RawMessage(fmt.Sprintf(`{"success":false,"error":"%s"}`, err.Error()))})
+		return
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.connect", Data: json.RawMessage(mustMarshal(map[string]interface{}{"success": true, "name": p.Name}))})
+}
+
+func (m *Multiplexer) handleMCPDisconnect(sess *Session, params json.RawMessage) {
+	var p struct {
+		Name string `json:"name"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if m.mcpMgr == nil || p.Name == "" {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.disconnect", Data: json.RawMessage(`{"success":false,"error":"client not found"}`)})
+		return
+	}
+	if err := m.mcpMgr.RemoveClient(p.Name); err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.disconnect", Data: json.RawMessage(fmt.Sprintf(`{"success":false,"error":"%s"}`, err.Error()))})
+		return
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.disconnect", Data: json.RawMessage(mustMarshal(map[string]interface{}{"success": true, "name": p.Name}))})
+}
+
+func (m *Multiplexer) handleMCPToolsList(sess *Session, params json.RawMessage) {
+	var p struct {
+		ServerName string `json:"server_name"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if m.mcpMgr == nil || p.ServerName == "" {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.tools.list", Data: json.RawMessage(`{"tools":[],"error":"invalid request"}`)})
+		return
+	}
+	client, ok := m.mcpMgr.GetClient(p.ServerName)
+	if !ok {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.tools.list", Data: json.RawMessage(`{"tools":[],"error":"client not found"}`)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	tools, err := client.ListTools(ctx)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.tools.list", Data: json.RawMessage(fmt.Sprintf(`{"tools":[],"error":"%s"}`, err.Error()))})
+		return
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.tools.list", Data: json.RawMessage(mustMarshal(map[string]interface{}{"server": p.ServerName, "tools": tools}))})
+}
+
+func (m *Multiplexer) handleMCPToolsCall(sess *Session, params json.RawMessage) {
+	var p struct {
+		ServerName string                 `json:"server_name"`
+		ToolName   string                 `json:"tool_name"`
+		Arguments  map[string]interface{} `json:"arguments,omitempty"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if m.mcpMgr == nil || p.ServerName == "" || p.ToolName == "" {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.tools.call", Data: json.RawMessage(`{"error":"invalid request"}`)})
+		return
+	}
+	client, ok := m.mcpMgr.GetClient(p.ServerName)
+	if !ok {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.tools.call", Data: json.RawMessage(`{"error":"client not found"}`)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	result, err := client.CallTool(ctx, p.ToolName, p.Arguments)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.tools.call", Data: json.RawMessage(fmt.Sprintf(`{"error":"%s"}`, err.Error()))})
+		return
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.tools.call", Data: json.RawMessage(mustMarshal(map[string]interface{}{"success": true, "server": p.ServerName, "tool": p.ToolName, "result": result}))})
+}
+
+func (m *Multiplexer) handleMCPResourcesList(sess *Session, params json.RawMessage) {
+	var p struct {
+		ServerName string `json:"server_name"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if m.mcpMgr == nil || p.ServerName == "" {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.resources.list", Data: json.RawMessage(`{"resources":[],"error":"invalid request"}`)})
+		return
+	}
+	client, ok := m.mcpMgr.GetClient(p.ServerName)
+	if !ok {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.resources.list", Data: json.RawMessage(`{"resources":[],"error":"client not found"}`)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	resources, err := client.ListResources(ctx)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.resources.list", Data: json.RawMessage(fmt.Sprintf(`{"resources":[],"error":"%s"}`, err.Error()))})
+		return
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.resources.list", Data: json.RawMessage(mustMarshal(map[string]interface{}{"server": p.ServerName, "resources": resources}))})
+}
+
+func (m *Multiplexer) handleMCPResourcesRead(sess *Session, params json.RawMessage) {
+	var p struct {
+		ServerName string `json:"server_name"`
+		URI        string `json:"uri"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if m.mcpMgr == nil || p.ServerName == "" || p.URI == "" {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.resources.read", Data: json.RawMessage(`{"error":"invalid request"}`)})
+		return
+	}
+	client, ok := m.mcpMgr.GetClient(p.ServerName)
+	if !ok {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.resources.read", Data: json.RawMessage(`{"error":"client not found"}`)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result, err := client.ReadResource(ctx, p.URI)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.resources.read", Data: json.RawMessage(fmt.Sprintf(`{"error":"%s"}`, err.Error()))})
+		return
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.resources.read", Data: json.RawMessage(mustMarshal(map[string]interface{}{"success": true, "server": p.ServerName, "uri": p.URI, "result": result}))})
+}
+
+func (m *Multiplexer) handleMCPPromptsList(sess *Session, params json.RawMessage) {
+	var p struct {
+		ServerName string `json:"server_name"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if m.mcpMgr == nil || p.ServerName == "" {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.list", Data: json.RawMessage(`{"prompts":[],"error":"invalid request"}`)})
+		return
+	}
+	client, ok := m.mcpMgr.GetClient(p.ServerName)
+	if !ok {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.list", Data: json.RawMessage(`{"prompts":[],"error":"client not found"}`)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	prompts, err := client.ListPrompts(ctx)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.list", Data: json.RawMessage(fmt.Sprintf(`{"prompts":[],"error":"%s"}`, err.Error()))})
+		return
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.list", Data: json.RawMessage(mustMarshal(map[string]interface{}{"server": p.ServerName, "prompts": prompts}))})
+}
+
+func (m *Multiplexer) handleMCPPromptsGet(sess *Session, params json.RawMessage) {
+	var p struct {
+		ServerName string                 `json:"server_name"`
+		Name       string                 `json:"name"`
+		Arguments  map[string]interface{} `json:"arguments,omitempty"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	if m.mcpMgr == nil || p.ServerName == "" || p.Name == "" {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.get", Data: json.RawMessage(`{"error":"invalid request"}`)})
+		return
+	}
+	client, ok := m.mcpMgr.GetClient(p.ServerName)
+	if !ok {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.get", Data: json.RawMessage(`{"error":"client not found"}`)})
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	result, err := client.GetPrompt(ctx, p.Name, p.Arguments)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.get", Data: json.RawMessage(fmt.Sprintf(`{"error":"%s"}`, err.Error()))})
+		return
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.get", Data: json.RawMessage(mustMarshal(map[string]interface{}{"success": true, "server": p.ServerName, "name": p.Name, "result": result}))})
 }
 
