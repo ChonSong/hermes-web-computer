@@ -839,6 +839,49 @@ func (m *Multiplexer) routeAgent(env Envelope, sess *Session, sessionID string) 
 
 		// Forward to Hermes Agent API
 		go m.handleChatWithHermes(sess, sessionID, params.Message)
+
+	// ---- Profile handlers ----
+	case "profiles.list":
+		m.handleProfilesList(sess, env.Params)
+
+	case "profiles.get":
+		m.handleProfilesGet(sess, env.Params)
+
+	// ---- Skill handlers ----
+	case "skills.list":
+		m.handleSkillsList(sess, env.Params)
+
+	case "skills.content":
+		m.handleSkillsContent(sess, env.Params)
+
+	// ---- Cron handlers ----
+	case "crons.list":
+		m.handleCronsList(sess, env.Params)
+
+	case "crons.create":
+		m.handleCronsCreate(sess, env.Params)
+
+	case "crons.update":
+		m.handleCronsUpdate(sess, env.Params)
+
+	case "crons.delete":
+		m.handleCronsDelete(sess, env.Params)
+
+	case "crons.pause":
+		m.handleCronsPause(sess, env.Params)
+
+	case "crons.resume":
+		m.handleCronsResume(sess, env.Params)
+
+	case "crons.run":
+		m.handleCronsRun(sess, env.Params)
+
+	// ---- Memory handlers ----
+	case "memory.read":
+		m.handleMemoryRead(sess, env.Params)
+
+	case "memory.write":
+		m.handleMemoryWrite(sess, env.Params)
 	}
 }
 
@@ -1131,5 +1174,160 @@ func (m *Multiplexer) handleToolExecute(sess *Session, sessionID string, tileSes
 	resultData := map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "result": json.RawMessage(mustMarshal(result))}
 	data, _ := json.Marshal(resultData)
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.result", Data: data})
+}
+
+// ---- Profile handlers ----
+
+func (m *Multiplexer) handleProfilesList(sess *Session, params json.RawMessage) {
+	var p struct {
+		Filter string `json:"filter,omitempty"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual profile listing
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "profiles.list", Data: json.RawMessage(`{"profiles":[]}`)})
+}
+
+func (m *Multiplexer) handleProfilesGet(sess *Session, params json.RawMessage) {
+	var p struct {
+		ID string `json:"id"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual profile retrieval
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "profiles.get", Data: json.RawMessage(`{"profile":null}`)})
+}
+
+// ---- Skill handlers ----
+
+func (m *Multiplexer) handleSkillsList(sess *Session, params json.RawMessage) {
+	var p struct {
+		Category string `json:"category,omitempty"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual skill listing
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "skills.list", Data: json.RawMessage(`{"skills":[]}`)})
+}
+
+func (m *Multiplexer) handleSkillsContent(sess *Session, params json.RawMessage) {
+	var p struct {
+		Name string `json:"name"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual skill content retrieval
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "skills.content", Data: json.RawMessage(`{"content":""}`)})
+}
+
+// ---- Cron handlers ----
+
+func (m *Multiplexer) handleCronsList(sess *Session, params json.RawMessage) {
+	// TODO: implement actual cron listing
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.list", Data: json.RawMessage(`{"crons":[]}`)})
+}
+
+func (m *Multiplexer) handleCronsCreate(sess *Session, params json.RawMessage) {
+	var p struct {
+		Name     string `json:"name"`
+		Schedule string `json:"schedule"`
+		Command  string `json:"command"`
+		Enabled  bool   `json:"enabled"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual cron creation
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.create", Data: json.RawMessage(`{"cron":{"id":""}}`)})
+}
+
+func (m *Multiplexer) handleCronsUpdate(sess *Session, params json.RawMessage) {
+	var p struct {
+		ID       string `json:"id"`
+		Name     string `json:"name,omitempty"`
+		Schedule string `json:"schedule,omitempty"`
+		Command  string `json:"command,omitempty"`
+		Enabled  *bool  `json:"enabled,omitempty"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual cron update
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.update", Data: json.RawMessage(`{"success":true}`)})
+}
+
+func (m *Multiplexer) handleCronsDelete(sess *Session, params json.RawMessage) {
+	var p struct {
+		ID string `json:"id"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual cron deletion
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.delete", Data: json.RawMessage(`{"success":true}`)})
+}
+
+func (m *Multiplexer) handleCronsPause(sess *Session, params json.RawMessage) {
+	var p struct {
+		ID string `json:"id"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual cron pause
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.pause", Data: json.RawMessage(`{"success":true}`)})
+}
+
+func (m *Multiplexer) handleCronsResume(sess *Session, params json.RawMessage) {
+	var p struct {
+		ID string `json:"id"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual cron resume
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.resume", Data: json.RawMessage(`{"success":true}`)})
+}
+
+func (m *Multiplexer) handleCronsRun(sess *Session, params json.RawMessage) {
+	var p struct {
+		ID string `json:"id"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual cron run
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.run", Data: json.RawMessage(`{"success":true}`)})
+}
+
+// ---- Memory handlers ----
+
+func (m *Multiplexer) handleMemoryRead(sess *Session, params json.RawMessage) {
+	var p struct {
+		Namespace string `json:"namespace,omitempty"`
+		Key       string `json:"key,omitempty"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual memory read
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.read", Data: json.RawMessage(`{"value":""}`)})
+}
+
+func (m *Multiplexer) handleMemoryWrite(sess *Session, params json.RawMessage) {
+	var p struct {
+		Namespace string `json:"namespace,omitempty"`
+		Key       string `json:"key"`
+		Value     string `json:"value"`
+	}
+	if params != nil {
+		json.Unmarshal(params, &p)
+	}
+	// TODO: implement actual memory write
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.write", Data: json.RawMessage(`{"success":true}`)})
 }
 

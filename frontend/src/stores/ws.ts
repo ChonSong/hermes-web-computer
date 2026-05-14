@@ -326,4 +326,60 @@ export function launchDashTile(type: string): string {
   return send({ protocol: "ui", method: "apps.launch", params: { type } })
 }
 
+// Profile helpers
+export function profilesList(): string {
+  return send({ protocol: "agent", method: "profiles.list" })
+}
+
+export function profilesGet(id: string): string {
+  return send({ protocol: "agent", method: "profiles.get", params: { id } })
+}
+
+// Skills helpers
+export function skillsList(): string {
+  return send({ protocol: "agent", method: "skills.list" })
+}
+
+export function skillsContent(id: string): string {
+  return send({ protocol: "agent", method: "skills.content", params: { id } })
+}
+
+// Crons helpers
+export function cronsList(): string {
+  return send({ protocol: "agent", method: "crons.list" })
+}
+
+export function cronsCreate(name: string, schedule: string, action: string, enabled = true): string {
+  return send({ protocol: "agent", method: "crons.create", params: { name, schedule, action, enabled } })
+}
+
+export function cronsUpdate(id: string, name?: string, schedule?: string, action?: string, enabled?: boolean): string {
+  return send({ protocol: "agent", method: "crons.update", params: { id, name, schedule, action, enabled } })
+}
+
+export function cronsDelete(id: string): string {
+  return send({ protocol: "agent", method: "crons.delete", params: { id } })
+}
+
+export function cronsPause(id: string): string {
+  return send({ protocol: "agent", method: "crons.pause", params: { id } })
+}
+
+export function cronsResume(id: string): string {
+  return send({ protocol: "agent", method: "crons.resume", params: { id } })
+}
+
+export function cronsRun(id: string): string {
+  return send({ protocol: "agent", method: "crons.run", params: { id } })
+}
+
+// Memory helpers
+export function memoryRead(key: string): string {
+  return send({ protocol: "agent", method: "memory.read", params: { key } })
+}
+
+export function memoryWrite(key: string, value: string): string {
+  return send({ protocol: "agent", method: "memory.write", params: { key, value } })
+}
+
 // Don't auto-connect - let main.ts call connect()
