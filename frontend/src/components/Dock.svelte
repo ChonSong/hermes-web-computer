@@ -16,6 +16,10 @@
     { id: "browser", label: "Browser", emoji: "🌐", type: "browser" },
     { id: "dashboard", label: "Dashboard", emoji: "📊", type: "dashboard", isPanelFeature: true },
     { id: "voice", label: "Voice", emoji: "🎤", type: "audio", isPanelFeature: true },
+    { id: "profiles", label: "Profiles", emoji: "👤", type: "profiles", isPanelFeature: true },
+    { id: "skills", label: "Skills", emoji: "◆", type: "skills", isPanelFeature: true },
+    { id: "crons", label: "Crons", emoji: "⏰", type: "crons", isPanelFeature: true },
+    { id: "memory", label: "Memory", emoji: "🧠", type: "memory", isPanelFeature: true },
   ]
 
   let activeApp = $state<string | null>(null)
@@ -54,8 +58,8 @@
 
   function handleLaunch(item: DockItem) {
     if (item.isPanelFeature) {
-      // Panel features don't create tiles - they're always visible
-      // Just update the active indicator
+      // Dispatch custom event for right panel tab switching
+      window.dispatchEvent(new CustomEvent('hwc-dock-panel', { detail: { panel: item.type } }))
       activeApp = activeApp === item.id ? null : item.id
       return
     }
@@ -87,6 +91,8 @@
 
     activeApp = item.id
   }
+
+  
 </script>
 
 <div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-50
@@ -100,7 +106,13 @@
           text-lg transition-all duration-150
           {hoveredApp === item.id ? 'scale-110' : 'scale-100'}
           {activeApp === item.id ? 'bg-purple-500/20 hover:bg-purple-500/30' : 'hover:bg-white/10'}"
-        onclick={() => handleLaunch(item)}
+        onclick={() => {
+          if (item.isPanelFeature) {
+            handleDockPanelClick(item)
+          } else {
+            handleLaunch(item)
+          }
+        }}
         onmouseenter={() => hoveredApp = item.id}
         onmouseleave={() => hoveredApp = null}
         aria-label={item.label}
