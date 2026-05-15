@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+# pre-commit hook for hermes-web-computer
+# Runs fast, local validation before allowing commits
+
+set -e  # Exit on first failure
+
+echo "🔍 Running pre-commit checks..."
+
+# ─── Go backend checks ───────────────────────────────────────────────────────
+echo ""
+echo "==> Go vet & test (backend)..."
+cd "$(git rev-parse --show-toplevel)/backend"
+go vet ./...
+go test -short ./...
+
+# ─── Frontend checks ─────────────────────────────────────────────────────────
+echo ""
+echo "==> Frontend vite build..."
+cd "$(git rev-parse --show-toplevel)/frontend"
+npm run build
+
+echo ""
+echo "✅ All pre-commit checks passed!"
