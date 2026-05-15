@@ -338,3 +338,14 @@ These need decisions before they can be spec'd:
 **What was discarded:** Full Ubuntu/XFCE desktop (bytebot — too heavy), AGPL C# stack (coder-desktop — wrong license+language), MCP-only architecture (kasm — adds protocol tax).
 
 **Archived repo:** `ChonSong/hermes-computer-planning` — branch `archive`, pushed May 2026.
+
+### Archived Documents (migrated to `docs/archive-source/`)
+
+| Document | Key Content |
+|----------|-------------|
+| `completion-plan.md` | 6-package assessment, P0/P1/P2 priority order, E2E test coverage, Hermes/LiteLLM integration plan |
+| `APPLICATION-PLAN.md` | 12 migration candidates from starred repos, tile architecture spec, 4-tier cron strategy |
+| `ONE-WEBSITE.md` | Three-pillar architecture (hermes-agent + agent-os → hermes-web-computer), 70% complete status |
+| `ANALYSIS-README.md` | Original 4-repo analysis (coder-desktop, kasm-mcp, bytebot, cua) — already captured above |
+
+These docs were live planning documents that informed v2.0 scope decisions. Preserved as reference for future decision-making.
