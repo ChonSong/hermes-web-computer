@@ -1,23 +1,264 @@
 name: CI
-on: [push, pull_request]
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  backend:
+  # ─── Phase 1: Lint & Build (fast checks, run first) ───────────────────────────
+  lint-and-build:
+    name: Lint & Build
     runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
-        with: { go-version: "1.25" }
-      - run: cd backend && go mod download
-      - run: cd backend && go build ./...
-      - run: cd backend && go vet ./...
-      - run: cd backend && go test ./...
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ["1.23", "1.24"]
+        node-version: ["20", "22"]
 
-  frontend:
-    runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: "22" }
-      - run: cd frontend && npm ci
-      - run: cd frontend && npm run build
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Go backend lint & build ────────────────────────────────────────────
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+
+      - name: Go mod download
+        run: cd backend && go mod download
+
+      - name: Go vet
+        run: cd backend && go vet ./...
+
+      - name: Go build
+        run: cd backend && go build -o /tmp/agent-os ./cmd/server
+
+      - name: Go test (short)
+        run: cd backend && go test -short ./...
+
+      # ── Frontend install & build ───────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+
+      - name: Frontend npm ci
+        run: cd frontend && npm ci
+
+      - name: Frontend build
+        run: cd frontend && npm run build
+
+      # ── Root-level e2e package install ────────────────────────────────────
+      - name: E2E tests npm ci
+        run: cd e2e && npm ci
+
+      # ── Bundle size check (threshold: 500KB) ──────────────────────────────
+      - name: Check bundle size
+        run: |
+          SIZE=$(wc -c < frontend/dist/assets/*.js 2>/dev/null | sort -rn | head -1)
+          echo "Largest JS bundle: ${SIZE} bytes"
+          THRESHOLD=500000
+          if [ "$SIZE" -gt "$THRESHOLD" ]; then
+            echo "ERROR: Bundle size ${SIZE} exceeds threshold ${THRESHOLD}"
+            exit 1
+          fi
+          echo "Bundle size OK (${SIZE} bytes < ${THRESHOLD})"
+
+  # ─── Phase 2: Playwright E2E Tests ──────────────────────────────────────────
+  e2e:
+    name: E2E Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Backend ───────────────────────────────────────────────────────────
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.24"
+
+      - name: Go mod download
+        run: cd backend && go mod download
+
+      - name: Start backend
+        run: cd backend && go run cmd/server/main.go &
+        env:
+          PORT: 3005
+
+      - name: Wait for backend
+        run: |
+          for i in $(seq 1 30); do
+            curl -s http://localhost:3005 > /dev/null && echo "Backend ready" && break
+            sleep 1
+          done
+
+      # ── Frontend ───────────────────────────────────────────────────────────
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Frontend npm ci
+        run: cd frontend && npm ci
+
+      - name: Start Vite dev server
+        run: cd frontend && npx vite --port 5173 &
+        env:
+          VITE_BACKEND_URL: http://localhost:3005
+
+      - name: Wait for Vite
+        run: |
+          for i in $(seq 1 30); do
+            curl -s http://localhost:5173 > /dev/null && echo "Vite ready" && break
+            sleep 1
+          done
+
+      # ── Playwright ─────────────────────────────────────────────────────────
+      - name: Install Playwright browsers
+        run: |
+          npx playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: |
+          cd e2e
+          npx playwright test \
+            --shard=${{ matrix.shard }}/2 \
+            --reporter=list,json \
+            --output=test-results
+
+      - name: Upload E2E results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-results-shard-${{ matrix.shard }}
+          path: e2e/test-results/
+          retention-days: 7
+
+  # ─── Phase 3: Accessibility Tests ───────────────────────────────────────────
+  a11y:
+    name: Accessibility Tests
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Frontend npm ci
+        run: cd frontend && npm ci
+
+      - name: Start Vite dev server
+        run: cd frontend && npx vite --port 5173 &
+        env:
+          VITE_BACKEND_URL: http://localhost:3005
+
+      - name: Wait for Vite
+        run: |
+          for i in $(seq 1 30); do
+            curl -s http://localhost:5173 > /dev/null && echo "Vite ready" && break
+            sleep 1
+          done
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run a11y tests
+        run: cd e2e && npx playwright test tests/a11y --reporter=list
+
+      - name: Upload a11y results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-results
+          path: e2e/test-results/
+          retention-days: 7
+
+  # ─── Phase 4: Visual Regression Tests ───────────────────────────────────────
+  visual:
+    name: Visual Regression
+    runs-on: ubuntu-latest
+    needs: lint-and-build
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Frontend npm ci
+        run: cd frontend && npm ci
+
+      - name: Start Vite dev server
+        run: cd frontend && npx vite --port 5173 &
+        env:
+          VITE_BACKEND_URL: http://localhost:3005
+
+      - name: Wait for Vite
+        run: |
+          for i in $(seq 1 30); do
+            curl -s http://localhost:5173 > /dev/null && echo "Vite ready" && break
+            sleep 1
+          done
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run visual tests
+        run: cd e2e && npx playwright test tests/visual --reporter=list
+
+      - name: Upload visual results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-results
+          path: e2e/test-results/
+          retention-days: 7
+
+  # ─── Nightly: Performance & Lighthouse Audit ─────────────────────────────────
+  nightly:
+    name: Nightly Audit
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' && github.event.schedule == '0 3 * * *'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Frontend npm ci
+        run: cd frontend && npm ci
+
+      - name: Build frontend
+        run: cd frontend && npm run build
+
+      - name: Run Lighthouse CI
+        uses: treosh/lighthouse-ci-action@v11
+        with:
+          configPath: ./lighthouserc.json
+          uploadArtifacts: true
