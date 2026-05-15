@@ -315,3 +315,26 @@ These need decisions before they can be spec'd:
 5. **Audio subprocess management** — How is Fun-Audio-Chat started/stopped? Managed by the Go backend or externally?
 6. **Telemetry opt-in** — Is cloud sync enabled by default or explicit opt-in?
 7. **Upgrade strategy** — How are backend updates handled without killing in-flight sessions?
+
+---
+
+## Appendix A: Reference Analysis (Archived → hermes-computer-planning)
+
+**Source:** `ChonSong/hermes-computer-planning` — comparative analysis of 4 real-world repos against this spec.
+
+**Repos analyzed:** coder-desktop-linux, kasm-mcp-server-v2, bytebot (11K stars), trycua/cua (15.8K stars)
+
+**Key findings that shaped this spec:**
+
+| Finding | Impact on v2.0 |
+|---------|---------------|
+| Sub-100ms interrupt unproven (Bytebot Takeover Mode is slowest) | Changed from hard requirement to `<150ms target, best-effort` |
+| MCP ecosystem growing — rejection risky | Added optional MCP compatibility layer to Non-Goals / Protocol section |
+| Cua's sandbox SDK (shell/screenshot/mouse) is exact interface needed | Validated PTY supervisor design |
+| Kasm's 21-tool taxonomy covers workspace management surface | Informs planned v1.x tool implementation |
+| Cua H.265 streaming is efficient but complex | Deferred to v2+; WebSocket binary frames sufficient for MVP |
+| VPN connectivity concept from coder-desktop useful | Noted in analysis; not directly implemented |
+
+**What was discarded:** Full Ubuntu/XFCE desktop (bytebot — too heavy), AGPL C# stack (coder-desktop — wrong license+language), MCP-only architecture (kasm — adds protocol tax).
+
+**Archived repo:** `ChonSong/hermes-computer-planning` — branch `archive`, pushed May 2026.
