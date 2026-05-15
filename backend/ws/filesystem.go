@@ -11,7 +11,15 @@ import (
 )
 
 // allowedRoot is the base directory for all filesystem operations.
-var allowedRoot = "/opt/data/hermes-web-computer"
+// Defaults to the repo root. Override via HERMES_HWC_ROOT env var for testing.
+func getAllowedRoot() string {
+	if root := os.Getenv("HERMES_HWC_ROOT"); root != "" {
+		return root
+	}
+	return "/home/hermeswebui/.hermes/hermes-web-computer"
+}
+
+var allowedRoot = getAllowedRoot()
 
 // sanitizePath ensures the requested path doesn't escape the allowed root.
 func sanitizePath(reqPath string) (string, error) {

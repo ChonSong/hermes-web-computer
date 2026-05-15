@@ -190,7 +190,7 @@ func TestWSFSWriteReadRoundTrip(t *testing.T) {
 	}
 
 	testContent := "hello from ws integration test " + fmt.Sprintf("%d", time.Now().UnixNano())
-	testPath := filepath.Join("/opt/data/hermes-web-computer", "test_ws_roundtrip.txt")
+	testPath := filepath.Join(os.Getenv("HERMES_HWC_ROOT"), "test_ws_roundtrip.txt")
 
 	// Write the file
 	writeParams := mustMarshal(map[string]string{
