@@ -5,15 +5,32 @@
   import ChatPanel from "./ChatPanel.svelte"
   import DashOverview from "./DashOverview.svelte"
   import DashFileManager from "./DashFileManager.svelte"
-  import DashObservability from "./DashObservability.svelte"
-  import DashAnalytics from "./DashAnalytics.svelte"
   import DashSystemStatus from "./DashSystemStatus.svelte"
   import { send, focus } from "../stores/ws"
   import type { LayoutTree } from "../stores/ws"
   import { fade } from "svelte/transition"
   import { cubicOut } from "svelte/easing"
+  import type { ComponentType } from "svelte"
 
   let { node, depth = 0 }: { node: LayoutTree; depth?: number } = $props()
+
+  // Lazy-loaded components — DashAnalytics and DashObservability are heavy
+  let DashAnalyticsComponent = $state<ComponentType | null>(null)
+  let DashObservabilityComponent = $state<ComponentType | null>(null)
+
+  // Load DashAnalytics and DashObservability on first render of those tiles
+  $effect(() => {
+    if (node.content === "dash-analytics" && !DashAnalyticsComponent) {
+      import("./DashAnalytics.svelte").then(m => {
+        DashAnalyticsComponent = m.default
+      })
+    }
+    if (node.content === "dash-observability" && !DashObservabilityComponent) {
+      import("./DashObservability.svelte").then(m => {
+        DashObservabilityComponent = m.default
+      })
+    }
+  })
 
   const isActive = $derived($focus === node.id)
 
@@ -72,9 +89,17 @@
     {:else if node.content === 'dash-filemanager'}
       <DashFileManager />
     {:else if node.content === 'dash-observability'}
-      <DashObservability />
+      {#if DashObservabilityComponent}
+        <svelte:component this={DashObservabilityComponent} />
+      {:else}
+        <div class="flex items-center justify-center h-full text-gray-500 text-sm">Loading...</div>
+      {/if}
     {:else if node.content === 'dash-analytics'}
-      <DashAnalytics />
+      {#if DashAnalyticsComponent}
+        <svelte:component this={DashAnalyticsComponent} />
+      {:else}
+        <div class="flex items-center justify-center h-full text-gray-500 text-sm">Loading...</div>
+      {/if}
     {:else if node.content === 'dash-system-status'}
       <DashSystemStatus />
     {:else if node.content === 'welcome'}

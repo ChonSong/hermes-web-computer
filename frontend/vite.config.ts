@@ -19,5 +19,16 @@ export default defineConfig({
   build: {
     outDir: "dist",
     target: "esnext",
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Monaco editor gets its own ~3.7MB chunk (loaded on demand)
+          "monaco-editor": ["monaco-editor"],
+          // Vendor chunks for better caching
+          "svelte-vendor": ["svelte"],
+          "xterm": ["@xterm/xterm", "@xterm/addon-fit"],
+        },
+      },
+    },
   },
 })
