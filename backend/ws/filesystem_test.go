@@ -8,6 +8,17 @@ import (
 	"testing"
 )
 
+// TestMain allows setting HERMES_HWC_ROOT before any tests run.
+// Package init() runs AFTER var initializers, so we use TestMain instead.
+func TestMain(m *testing.M) {
+	wd, _ := os.Getwd()
+	// wd is /opt/data/cache/hermes-web-computer/hermes-web-sync/backend/ws (go test ./ws/)
+	// strip /ws to get /backend, strip /backend to get repo root
+	repoRoot := filepath.Dir(filepath.Dir(wd))
+	os.Setenv("HERMES_HWC_ROOT", repoRoot)
+	os.Exit(m.Run())
+}
+
 // --- helpers ---
 
 // drainEvents reads all pending events from the session's send channel and returns them.
@@ -76,7 +87,7 @@ func TestSanitizePath_AbsoluteEscape(t *testing.T) {
 	if err != nil {
 		t.Fatalf("expected sandboxed path, got error: %v", err)
 	}
-	if !strings.HasPrefix(got, allowedRoot) {
+	if !strings.HasPrefix(got, allowedRootLazy()) {
 		t.Fatalf("expected path under %q, got %q", allowedRoot, got)
 	}
 }

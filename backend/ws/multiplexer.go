@@ -367,6 +367,9 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 	case "fs.stat":
 		m.handleFSStat(sess, env.Params)
 
+	case "fs.rename":
+		m.handleFSRename(sess, env.Params)
+
 	case "apps.list":
 		m.handleAppsList(sess)
 
@@ -537,7 +540,7 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 		}
 		m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.status", Data: json.RawMessage(mustMarshal(status))})
 
-	case "fs.delete":
+case "fs.delete":
 		var params struct {
 			Path string `json:"path"`
 		}
@@ -545,7 +548,12 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
 			return
 		}
-		if err := os.RemoveAll(params.Path); err != nil {
+		cleanPath, err := sanitizePath(params.Path)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if err := os.RemoveAll(cleanPath); err != nil {
 			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
 			return
 		}
