@@ -264,7 +264,7 @@
 
 <div
   class="h-full mt-12 mr-1 mb-1 flex flex-col overflow-hidden transition-all duration-200 ease-out
-    backdrop-blur-2xl bg-[#12121a]/80 border border-white/10 rounded-2xl shadow-panel"
+    bg-[#191919] border border-white/10 rounded-2xl shadow-panel"
   class:w-0={collapsed}
   class:w-[360px]={!collapsed}
   class:opacity-0={collapsed}

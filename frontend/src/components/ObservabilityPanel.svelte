@@ -108,7 +108,7 @@
   })
 </script>
 
-<div class="flex flex-col h-full bg-[#12121a]">
+<div class="flex flex-col h-full bg-[#191919]">
   <!-- Header -->
   <div class="flex-none px-4 py-2.5 border-b border-white/10 flex items-center justify-between">
     <div class="flex items-center gap-2">

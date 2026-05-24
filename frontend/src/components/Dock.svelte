@@ -96,7 +96,7 @@
 </script>
 
 <div class="fixed bottom-3 left-1/2 -translate-x-1/2 z-50
-  backdrop-blur-2xl bg-[#12121a]/70 border border-white/10 rounded-full
+  bg-[#191919] border border-white/10 rounded-full
   px-4 py-2 flex items-center gap-3 shadow-panel
   animate-fade-in">
   {#each dockItems as item}

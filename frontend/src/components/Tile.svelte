@@ -60,7 +60,7 @@
 {:else}
   <div
     class="w-full h-full border-2 rounded-2xl cursor-pointer relative transition-all duration-200 ease-out
-      backdrop-blur-xl bg-[#12121a]/90 border-white/10 shadow-panel
+      backdrop-blur-xl bg-[#191919] border-white/10 shadow-panel
       {isActive ? 'border-glass-border-active ring-1 ring-purple-500/20' : ''}"
     tabindex="0"
     role="button"

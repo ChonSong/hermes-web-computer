@@ -129,7 +129,7 @@
   <!-- Floating tiles overlay -->
   {#each floatingTiles as ft (ft.id)}
     <div
-      class="absolute z-50 backdrop-blur-2xl bg-[#12121a]/92 border border-white/10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.4),0_0_0_1px_rgba(168,85,247,0.1)] transition-shadow duration-200 overflow-hidden"
+      class="absolute z-50 backdrop-blur-2xl bg-[#191919] border border-white/10 rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.4),0_0_0_1px_rgba(168,85,247,0.1)] transition-shadow duration-200 overflow-hidden"
       style="left: {ft.x}px; top: {ft.y}px; width: {ft.width}px; height: {ft.height}px;"
       onmousedown={(e) => onBodyMouseDown(e, ft)}
     >

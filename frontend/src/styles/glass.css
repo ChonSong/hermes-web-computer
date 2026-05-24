@@ -6,6 +6,7 @@
   --color-panel-hover: rgba(30, 30, 42, 0.6);
   --color-glass-border: rgba(255, 255, 255, 0.1);
   --color-glass-border-active: rgba(167, 139, 250, 0.5);
+  --color-top-bar: rgba(28, 28, 29, 0.95);
 
   /* Custom shadows */
   --shadow-panel: 0 8px 32px rgba(0, 0, 0, 0.4);

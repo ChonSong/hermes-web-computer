@@ -121,7 +121,7 @@
 
 <div class="flex flex-col h-full">
   <!-- URL bar — glass panel style -->
-  <div class="flex items-center gap-1 p-1.5 bg-[#12121a]/60 backdrop-blur-sm border-b border-white/10">
+  <div class="flex items-center gap-1 p-1.5 bg-[#191919] backdrop-blur-sm border-b border-white/10">
     <button
       class="px-2 py-1 text-gray-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors text-sm"
       onclick={goBack}

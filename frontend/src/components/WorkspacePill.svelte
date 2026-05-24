@@ -15,8 +15,9 @@
 </script>
 
 <div class="fixed top-2 left-1/2 -translate-x-1/2 z-50
-  backdrop-blur-xl bg-white/5 border border-white/10 rounded-full
-  px-4 py-1 flex items-center gap-3 shadow-float">
+  backdrop-blur-xl border border-white/10 rounded-full
+  px-4 py-1 flex items-center gap-3 shadow-float"
+  style="background-color: #1c1c1d; opacity: 0.95;">
   <!-- Workspace dots -->
   {#each Array.from({ length: workspaceCount }, (_, i) => i + 1) as ws}
     <button

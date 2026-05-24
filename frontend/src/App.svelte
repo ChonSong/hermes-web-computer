@@ -194,7 +194,7 @@
 
 <div class="h-screen w-screen text-gray-100 overflow-hidden relative">
   <!-- Gradient background layer -->
-  <div class="fixed inset-0 -z-20 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-[#1a0a2e] via-[#0a0a0f] to-[#0a0a0f]"></div>
+  <div class="fixed inset-0 -z-20 bg-[#0a0a0f]"></div>
 
   <!-- Subtle animated grain overlay -->
   <div
