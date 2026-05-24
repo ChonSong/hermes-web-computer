@@ -52,10 +52,12 @@
   let cpuPercent = $state(0)
   let memPercent = $state(0)
   let tempCelsius = $state(0)
-  let volumeLevel = $state(100) // 0-100, 0=muted
-  let wifiConnected = $state(true)
+  let volumePercent = $state(100)
+  let volumeMuted = $state(false)
+  let wifiConnected = $state(false)
   let batteryPercent = $state(100)
   let batteryCharging = $state(false)
+  let batteryAvailable = $state(false)
 
   onMount(() => {
     // Poll metrics from the global window object (set by backend via WS event)
@@ -63,7 +65,8 @@
       const win = globalThis as typeof globalThis & {
         __hwcMetrics?: {
           cpu?: number; mem?: number; temp?: number;
-          volume?: number; wifi?: boolean; battery?: number; charging?: boolean
+          volume?: number; volumeMuted?: boolean;
+          wifi?: boolean; battery?: number; charging?: boolean
         }
       }
       const m = win.__hwcMetrics
@@ -71,7 +74,8 @@
         if (m.cpu !== undefined) cpuPercent = m.cpu
         if (m.mem !== undefined) memPercent = m.mem
         if (m.temp !== undefined) tempCelsius = m.temp
-        if (m.volume !== undefined) volumeLevel = m.volume
+        if (m.volume !== undefined) volumePercent = m.volume
+        if (m.volumeMuted !== undefined) volumeMuted = m.volumeMuted
         if (m.wifi !== undefined) wifiConnected = m.wifi
         if (m.battery !== undefined) batteryPercent = m.battery
         if (m.charging !== undefined) batteryCharging = m.charging
@@ -89,10 +93,18 @@
       const m = data as {
         cpu?: { percent?: number }; memory?: { used_percent?: number }
         temperature?: { celsius?: number }; audio?: { icon?: string }
+        wifi?: { connected?: boolean }; battery?: { percent?: number; charging?: boolean; available?: boolean }
+        volume?: { percent?: number; muted?: boolean }
       } | null
       if (m?.cpu?.percent !== undefined) cpuPercent = m.cpu.percent
       if (m?.memory?.used_percent !== undefined) memPercent = m.memory.used_percent
       if (m?.temperature?.celsius !== undefined) tempCelsius = m.temperature.celsius
+      if (m?.wifi?.connected !== undefined) wifiConnected = m.wifi.connected
+      if (m?.battery?.percent !== undefined) batteryPercent = m.battery.percent
+      if (m?.battery?.charging !== undefined) batteryCharging = m.battery.charging
+      if (m?.battery?.available !== undefined) batteryAvailable = m.battery.available
+      if (m?.volume?.percent !== undefined) volumePercent = m.volume.percent
+      if (m?.volume?.muted !== undefined) volumeMuted = m.volume.muted
     })
     return cleanup
   })
@@ -182,23 +194,25 @@
     bg-[rgba(18,18,26,0.85)]">
 
     <!-- Wifi -->
-    <span class="text-xs" title="WiFi: {wifiConnected ? 'Connected' : 'Disconnected'}">
+    <span class="text-xs {wifiConnected ? 'text-white' : 'text-white/40'}" title="WiFi: {wifiConnected ? 'Connected' : 'Disconnected'}">
       {wifiConnected ? "🌐" : "📡"}
     </span>
 
     <!-- Volume -->
-    <span class="text-xs" title="Volume: {volumeLevel}%">
-      {volumeLevel === 0 ? "🔇" : volumeLevel < 50 ? "🔉" : "🔊"}
+    <span class="text-xs {volumeMuted ? 'text-white/40' : 'text-white'}" title="Volume: {volumeMuted ? 'Muted' : volumePercent + '%'}">
+      {volumeMuted ? "🔇" : volumePercent < 50 ? "🔉" : "🔊"}
     </span>
 
-    <!-- Battery -->
-    <span class="text-xs" title="Battery: {batteryPercent}%{batteryCharging ? ' (charging)' : ''}">
-      {batteryCharging ? "⚡" : batteryPercent < 20 ? "🪫" : "🔋"}
-    </span>
+    <!-- Battery (only render when battery is available on this machine) -->
+    {#if batteryAvailable}
+      <span class="text-xs {batteryPercent < 20 ? 'text-red-400' : 'text-white/80'}" title="Battery: {batteryPercent}%{batteryCharging ? ' (charging)' : ''}">
+        {batteryCharging ? "⚡" : batteryPercent < 20 ? "🪫" : "🔋"}
+      </span>
+    {/if}
 
     <!-- Temperature -->
-    <span class="text-xs" title="CPU: {tempCelsius.toFixed(0)}°C">
-      {tempCelsius > 80 ? "🔥" : tempCelsius > 60 ? "🌡️" : "🌡️"}
+    <span class="text-xs {tempCelsius > 80 ? 'text-red-400' : 'text-white/60'}" title="CPU: {tempCelsius.toFixed(0)}°C">
+      {tempCelsius > 80 ? "🔥" : "🌡️"}
     </span>
 
     <!-- Separator -->
