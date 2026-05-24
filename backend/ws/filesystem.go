@@ -16,7 +16,12 @@ func getAllowedRoot() string {
 	if root := os.Getenv("HERMES_HWC_ROOT"); root != "" {
 		return root
 	}
-	return "/opt/data/hermes-web-computer"
+	// Fallback to cwd/repo root — don't hardcode /opt/data/
+	cwd, _ := os.Getwd()
+	if cwd != "" {
+		return cwd
+	}
+	return "/home/hermeswebui/.hermes/hermes-web-computer"
 }
 
 var allowedRoot = getAllowedRoot()
