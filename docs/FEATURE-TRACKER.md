@@ -41,7 +41,7 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 **Backend dependencies (for system tray):**
 | Dependency | Status | Notes |
 |------------|--------|-------|
-| Host metrics endpoint (CPU/mem/net/temp) | ⚪ not-started | `/api/system/metrics` returning host data |
+| Host metrics endpoint (CPU/mem/net/temp) | ✅ Complete | `/api/system/metrics` + WS `system.metrics` returning host data |
 | Audio status from Fun-Audio-Chat | ⚪ not-started | Subscribed to audio state events |
 | Wifi/network status | ⚪ not-started | Netifaces or similar |
 
@@ -83,7 +83,7 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Config Manager | `config/manager.go` | ✅ Complete | YAML read/write + env vars |
 | Docker Manager | `docker/manager.go` | ✅ Complete | CLI wrapper |
 | Agent Streamer | `agent/streamer.go` | ✅ Complete | SSE client for Hermes |
-| Host Metrics | `ws/metrics.go` | ⚪ not-started | CPU/mem/net/temp for Waybar |
+| Host Metrics | `ws/metrics.go` | ✅ Complete | CPU/mem/net/temp for Waybar |
 
 ---
 

@@ -179,6 +179,7 @@ func (m *Multiplexer) Router() http.Handler {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("ok"))
 	})
+	mux.HandleFunc("/api/system/metrics", ServeMetricsHTTP)
 	// Serve static frontend files - check absolute path first to avoid stale dist dirs
 	distPaths := []string{
 		"/opt/data/hermes-web-computer/frontend/dist",
@@ -498,6 +499,11 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 			"timestamp":  time.Now().UnixMilli(),
 		}
 		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.info.response", Data: json.RawMessage(mustMarshal(info))})
+
+	case "system.metrics":
+		metrics := globalCollector.FetchMetrics()
+		resp, _ := json.Marshal(metrics)
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.metrics", Data: json.RawMessage(resp)})
 
 	case "system.resources":
 		var memStats runtime.MemStats
