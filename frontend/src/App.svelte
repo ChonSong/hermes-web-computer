@@ -7,6 +7,7 @@
   import KeymapOverlay from "./components/KeymapOverlay.svelte"
   import Waybar from "./components/Waybar.svelte"
   import Dock from "./components/Dock.svelte"
+  import BottomPanel from "./components/BottomPanel.svelte"
   import { workspaceStore, setActiveWorkspace, moveTileToWorkspace, toggleFloating } from "./stores/workspace"
   import { ws, send, focus, layout, type LayoutTree } from "./stores/ws"
   import { setContext, getContext } from "svelte"
@@ -233,6 +234,7 @@
   <!-- Illogical Impulse overlay components -->
   <Waybar />
   <Dock />
+  <BottomPanel />
 </div>
 
 <CommandPalette bind:visible={showPalette} />
