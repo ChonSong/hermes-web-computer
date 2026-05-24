@@ -25,10 +25,10 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 
 | Feature | Spec section | Status | Last Updated | Notes |
 |---------|-------------|--------|-------------|-------|
-| Waybar top bar | WAYBAR-SPEC.md §2 | ⚪ not-started | — | Workspace pill + system tray |
-| Clickable workspace indicators | WAYBAR-SPEC.md §4 | ⚪ not-started | — | Replace keyboard-only Shift+1-9 |
-| Window title in Waybar | WAYBAR-SPEC.md §2 | ⚪ not-started | — | Subscribe to `ui.focus.changed` |
-| System tray (wifi/volume/battery/temp) | WAYBAR-SPEC.md §2.3 | ⚪ not-started | — | Backend metrics endpoint needed |
+| Waybar top bar | WAYBAR-SPEC.md §2 | ✅ Complete | 2026-05-24 | Waybar.svelte replaces WorkspacePill — 9 clickable dots, window title, agent status, clock |
+| Clickable workspace indicators | WAYBAR-SPEC.md §4 | ✅ Complete | 2026-05-24 | Click dot → setActiveWorkspace(n) — keyboard still works (Shift+1-9) |
+| Window title in Waybar | WAYBAR-SPEC.md §2 | ✅ Complete | 2026-05-24 | Subscribes to ui.focus.changed WS event |
+| System tray (wifi/volume/battery/temp) | WAYBAR-SPEC.md §2.3 | 🟡 In progress | 2026-05-24 | Icons present + WS event subscription; real host data wiring next |
 | Dock: click-to-launch tiles | WAYBAR-SPEC.md §3 | ⚪ not-started | — | Currently launches panels, not tiles |
 | Dock: running indicator dot | WAYBAR-SPEC.md §3.2 | ⚪ not-started | — | Purple dot for open apps |
 | Dock: pin/unpin apps | WAYBAR-SPEC.md §3.3 | ⚪ not-started | — | Right-click context menu |
