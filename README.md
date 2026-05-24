@@ -1,6 +1,6 @@
 # hermes-web-computer
 
-> **Agent-OS v1.2** — A browser-based tiling AI desktop for collaborative development between a human, Hermes (text/terminal agent), and Fun-Audio-Chat (voice agent).
+> **hermes-web-computer v1.2** — A browser-based tiling AI desktop for collaborative development between a human, Hermes (text/terminal agent), and Fun-Audio-Chat (voice agent). Web-native tiles (Svelte+Go) as primary model; xpra escape hatch for native Linux GUI apps.
 
 [![Go](https://img.shields.io/badge/Go-1.21+-00ADD8?logo=go)](https://go.dev/)
 [![Svelte](https://img.shields.io/badge/Svelte-5-FF3E00?logo=svelte)](https://svelte.dev/)
@@ -16,22 +16,26 @@
 ## Quick Start
 
 ```bash
-# Clone
-git clone https://github.com/ChonSong/hermes-web-computer.git
-cd hermes-web-computer
+# SSH to host (EndeavourOS)
+ssh -i /home/hermeswebui/.hermes/container_key sean@172.19.0.1
 
-# Run everything with make
-make dev
+# Build backend
+cd /home/sean/.hermes/hermes-web-computer/backend
+go build -o /tmp/hwc-server ./cmd/server/
 
-# Or start manually (two terminals):
-# Terminal 1 — Backend (Go server on :3001)
-cd backend && go mod tidy && go run cmd/server/main.go
+# Build frontend
+cd /home/sean/.hermes/hermes-web-computer/frontend && npm run build
 
-# Terminal 2 — Frontend (Vite dev server)
-cd frontend && npm install && npm run dev
+# Start server (port 3005)
+HERMES_HWC_ROOT=/home/sean/.hermes/hermes-web-computer \
+  nohup ./hwc-server --port 3005 > /tmp/hwc-server.log 2>&1 &
+
+# Run Go tests
+cd /home/sean/.hermes/hermes-web-computer/backend
+go test ./... -count=1 -timeout=120s
 ```
 
-Open `http://localhost:3001` (or `http://localhost:5173` in dev mode).
+Open `http://localhost:3005` (port 3005, not 3001).
 
 ## Architecture
 
@@ -250,16 +254,16 @@ Config: `~/.agent-os/security.yaml` (falls back to defaults if missing).
 
 ## Design System
 
-The UI uses a **glassmorphism** aesthetic:
+The UI uses a **solid dark** aesthetic (glassmorphism removed, 2026-05-23):
 
-- **Background:** Dark `#12121a/90` with `backdrop-blur-xl`
-- **Borders:** `border-white/10` glass, `border-glass-border-active` for focused tiles
-- **Active state:** Purple ring `ring-purple-500/20`
-- **Shadow:** `shadow-panel` custom shadow
-- **Dock:** `backdrop-blur-2xl bg-[#12121a]/70` with rounded-full shape
-- **Typography:** Tailwind defaults with `font-mono` for shortcuts
+| Region | Color |
+|--------|-------|
+| Top bar / Left panel / Dock | `#191919` |
+| Center tiles | `#1a1a1a` |
+| Right panel | `#1d1d1d` |
+| Border radius | 12px (tiles), 16px (floating panels) |
 
-> **Note:** `ILLOGICAL-IMPULSE-DESIGN.md` is referenced in the design spec — ensure this file exists in the repo for full design token documentation.
+> Full design tokens: [`docs/ILLOGICAL-IMPULSE-DESIGN.md`](docs/ILLOGICAL-IMPULSE-DESIGN.md)
 
 ---
 
@@ -345,26 +349,37 @@ The Go server serves the built `frontend/dist/` static files directly — no sep
 
 ---
 
-## Current Status
+## Current Status (v1.2, 2026-05-24)
 
-- ✅ **WebSocket multiplexer** — JSON-RPC routing (ui/agent/audio)
-- ✅ **PTY supervisor** — Ring buffer, checkpoint, signal handling, output channel
-- ✅ **Layout engine** — Split/mount/unmount/resize/swap/fullscreen ops
-- ✅ **Security enforcer** — Tiered YAML permissions, token-gated execution
-- ✅ **Telemetry** — JSONL ring buffer, async sync with backoff
-- ✅ **Audio bridge** — Fun-Audio-Chat binary protocol relay
-- ✅ **Browser automation** — Chromedp navigate/click/screenshot/input
-- ✅ **Hermes chat** — Agent API integration with fallback
-- ✅ **Svelte 5 SPA** — Recursive Tile, Terminal, Monaco, CommandPalette, Dock
-- ✅ **Docker Compose** — agent-os + hermes + fun-audio + caddy
-- ✅ **CI** — GitHub Actions (Go build/vet/test + Node build)
-- ✅ **E2E test** — WebSocket connect → layout → PTY echo → interrupt → checkpoint
+**Core:**
+- ✅ WebSocket multiplexer (ui/agent/audio protocols, JSON-RPC)
+- ✅ PTY supervisor — 1MB ring buffer + checkpoint + SIGINT
+- ✅ Layout engine — split/mount/unmount/resize/swap/fullscreen + delta ops
+- ✅ Security enforcer — YAML tiers (safe/prompt/block) + token gating
+- ✅ Session store — JSON file-based, full-text search
+- ✅ Browser tile — chromedp headless Chrome (navigate/click/input/screenshot)
+- ✅ 9 workspaces with independent layout trees
+- ✅ Full keyboard shortcut map
 
----
+**UI:**
+- ✅ Svelte 5 SPA (31 components: panels, tiles, dock, command palette)
+- ✅ Theme: solid `#191919` dark (ΔE<8 vs reference, verified 2026-05-24)
+- ✅ xterm.js terminal (lazy-loaded)
+- ✅ Monaco editor (read-only with Ctrl+S save)
+- ✅ 5 Dashboard tiles (Overview/FileManager/SystemStatus/Analytics/Observability)
+- ✅ 17+ Playwright E2E tests (layout, resize, chaos, a11y, perf)
+- ✅ 45+ Go backend tests
+
+**What's Next:**
+- 🚧 Waybar + clickable workspaces (see [`docs/WAYBAR-SPEC.md`](docs/WAYBAR-SPEC.md))
+- 🚧 Dock refinements (click-to-launch tiles, running indicators)
+- 🚧 File explorer sidebar (VSCode-style collapsible tree)
+- 🚧 Bottom terminal panel (tabbed: Terminal/Problems/Output/Ports)
+- 🚧 Multi-user support — Coder integration ([`docs/MULTI-USER-PLAN.md`](docs/MULTI-USER-PLAN.md))
 
 ## Full Specification
 
-See [`docs/spec.md`](docs/spec.md) for the complete Agent-OS v1.2 specification.
+See [`docs/SPEC.md`](docs/SPEC.md) for the complete v1.2 specification and [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full architecture breakdown.
 
 ## License
 
