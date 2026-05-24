@@ -11,3 +11,4 @@ frontend/package-lock.json
 backend/agent-os
 test-results/
 test-results/
+backend/.gopath/

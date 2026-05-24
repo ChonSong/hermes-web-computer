@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -69,6 +70,7 @@ type Multiplexer struct {
 	configMgr   *config.Manager
 	dockerMgr   *docker.Manager
 	mcpMgr      *mcp.Manager
+	startTime   time.Time // server start time for uptime calculation
 }
 
 // SetConfigManager attaches the config manager to the multiplexer.
@@ -114,6 +116,7 @@ func NewMultiplexer() *Multiplexer {
 		contextMgr: NewContextManager(),
 		hermesURL:  os.Getenv("HERMES_API_URL"),
 		httpClient: &http.Client{Timeout: 60 * time.Second},
+		startTime:  time.Now(),
 	}
 	if m.hermesURL == "" {
 		m.hermesURL = "http://localhost:8642"
@@ -456,11 +459,20 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 		}
 
 	case "dashboard.stats":
+		// Compute real dashboard stats from session store and system info
+		hostname, _ := os.Hostname()
 		stats := map[string]interface{}{
-			"total_sessions":  len(m.sessions),
+			"total_sessions":  0,
 			"active_sessions": len(m.sessions),
-			"uptime_seconds":  time.Since(time.Now().Add(-time.Hour)).Seconds(), // placeholder
+			"uptime_seconds":  int64(time.Since(m.startTime).Seconds()),
+			"hostname":        hostname,
+			"version":         "v1.3.0",
+			"started_at":      m.startTime.Unix(),
 			"timestamp":       time.Now().UnixMilli(),
+		}
+		if m.sessionStore != nil {
+			allSessions, _ := m.sessionStore.All()
+			stats["total_sessions"] = len(allSessions)
 		}
 		m.sendEvent(sess, Event{Protocol: "ui", Event: "dashboard.stats.response", Data: json.RawMessage(mustMarshal(stats))})
 
@@ -474,31 +486,61 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 		if params.Days == 0 {
 			params.Days = 7
 		}
+		// Compute real analytics from session store
+		totals := map[string]interface{}{
+			"total_input":          0,
+			"total_output":         0,
+			"total_sessions":       0,
+			"total_api_calls":      0,
+			"total_estimated_cost": nil,
+		}
+		var daily []interface{}
+		var byModel []interface{}
+		topSkills := []interface{}{}
+
+		if m.sessionStore != nil {
+			allSessions, err := m.sessionStore.All()
+			if err == nil {
+				totals["total_sessions"] = len(allSessions)
+				var totalInput, totalOutput int
+				for _, sess := range allSessions {
+					for _, msg := range sess.Messages {
+						if msg.Role == "user" {
+							totalInput += len(msg.Content)
+						} else if msg.Role == "assistant" {
+							totalOutput += len(msg.Content)
+						}
+					}
+				}
+				totals["total_input"] = totalInput
+				totals["total_output"] = totalOutput
+			}
+		}
+
 		result := map[string]interface{}{
-			"totals": map[string]interface{}{
-				"total_input":          0,
-				"total_output":         0,
-				"total_sessions":       len(m.sessions),
-				"total_api_calls":      0,
-				"total_estimated_cost": nil,
-			},
-			"daily":     []interface{}{},
-			"by_model":  []interface{}{},
-			"skills":    map[string]interface{}{"top_skills": []interface{}{}},
-			"period":    params.Days,
+			"totals":   totals,
+			"daily":    daily,
+			"by_model": byModel,
+			"skills":   map[string]interface{}{"top_skills": topSkills},
+			"period":   params.Days,
 			"timestamp": time.Now().UnixMilli(),
 		}
 		m.sendEvent(sess, Event{Protocol: "ui", Event: "analytics.result", Data: json.RawMessage(mustMarshal(result))})
 
 	case "system.info":
+		hostname, _ := os.Hostname()
 		info := map[string]interface{}{
-			"version":    "v1.0.0",
-			"go_version": "1.26",
-			"os":         runtime.GOOS,
-			"arch":       runtime.GOARCH,
-			"timestamp":  time.Now().UnixMilli(),
+			"version":      "v1.3.0",
+			"go_version":   runtime.Version(),
+			"os":           runtime.GOOS,
+			"arch":         runtime.GOARCH,
+			"hostname":     hostname,
+			"uptime":       int64(time.Since(m.startTime).Seconds()),
+			"num_cpu":      runtime.NumCPU(),
+			"total_mem_gb": getTotalMemGB(),
+			"timestamp":    time.Now().UnixMilli(),
 		}
-		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.info.response", Data: json.RawMessage(mustMarshal(info))})
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.info.result", Data: json.RawMessage(mustMarshal(info))})
 
 	case "system.metrics":
 		metrics := globalCollector.FetchMetrics()
@@ -508,27 +550,56 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 	case "system.resources":
 		var memStats runtime.MemStats
 		runtime.ReadMemStats(&memStats)
+		// Read host memory from /proc/meminfo for real system memory usage
+		hostMemUsed, hostMemTotal := readHostMemInfo()
 		res := map[string]interface{}{
-			"memory_alloc_mb":   float64(memStats.Alloc) / 1024 / 1024,
-			"memory_total_mb":   float64(memStats.TotalAlloc) / 1024 / 1024,
-			"goroutines":        runtime.NumGoroutine(),
-			"num_cpu":           runtime.NumCPU(),
-			"gc_pause_ns":       memStats.PauseTotalNs,
-			"timestamp":         time.Now().UnixMilli(),
+			"cpu_percent":   getCPUUsage(),
+			"mem_used_gb":  hostMemUsed,
+			"mem_total_gb": hostMemTotal,
+			"mem_percent":  func() float64 { if hostMemTotal > 0 { return (hostMemUsed / hostMemTotal) * 100 }; return 0 }(),
+			"disk_used_gb": getDiskUsage(),
+			"disk_total_gb": getDiskTotal(),
+			"disk_percent": getDiskPercent(),
+			"goroutines":   runtime.NumGoroutine(),
+			"gc_pause_ns":  memStats.PauseTotalNs,
+			"timestamp":    time.Now().UnixMilli(),
 		}
-		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.resources.response", Data: json.RawMessage(mustMarshal(res))})
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.resources.result", Data: json.RawMessage(mustMarshal(res))})
 
 	case "system.services":
+		// Build real service list with uptime
+		var svcList []map[string]interface{}
+		svcList = append(svcList, map[string]interface{}{
+			"name":    "websocket",
+			"running": true,
+			"pid":     os.Getpid(),
+			"uptime":  int64(time.Since(m.startTime).Seconds()),
+		})
+		svcList = append(svcList, map[string]interface{}{
+			"name":    "pty",
+			"running": m.supervisor != nil,
+			"uptime":  int64(time.Since(m.startTime).Seconds()),
+		})
+		svcList = append(svcList, map[string]interface{}{
+			"name":    "browser",
+			"running": m.browser != nil,
+		})
+		if m.audio != nil {
+			svcList = append(svcList, map[string]interface{}{
+				"name":    "audio",
+				"running": true,
+			})
+		} else {
+			svcList = append(svcList, map[string]interface{}{
+				"name":    "audio",
+				"running": false,
+			})
+		}
 		services := map[string]interface{}{
-			"services": []map[string]interface{}{
-				{"name": "websocket", "status": "running"},
-				{"name": "pty", "status": "running"},
-				{"name": "browser", "status": "available"},
-				{"name": "audio", "status": func() string { if m.audio != nil { return "available" }; return "unavailable" }()},
-			},
+			"services": svcList,
 			"timestamp": time.Now().UnixMilli(),
 		}
-		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.services.response", Data: json.RawMessage(mustMarshal(services))})
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.services.result", Data: json.RawMessage(mustMarshal(services))})
 
 	case "observability.status":
 		status := map[string]interface{}{
@@ -1871,5 +1942,108 @@ func (m *Multiplexer) handleMCPPromptsGet(sess *Session, params json.RawMessage)
 		return
 	}
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "mcp.prompts.get", Data: json.RawMessage(mustMarshal(map[string]interface{}{"success": true, "server": p.ServerName, "name": p.Name, "result": result}))})
+}
+
+// getTotalMemGB returns total system memory in GB from /proc/meminfo.
+func getTotalMemGB() float64 {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && fields[0] == "MemTotal:" {
+			kb, _ := strconv.ParseInt(fields[1], 10, 64)
+			return float64(kb) / 1024 / 1024
+		}
+	}
+	return 0
+}
+
+// readHostMemInfo returns used and total memory in GB from /proc/meminfo.
+func readHostMemInfo() (used, total float64) {
+	data, err := os.ReadFile("/proc/meminfo")
+	if err != nil {
+		return 0, 0
+	}
+	var memTotal, memFree, buffers, cached int64
+	for _, line := range strings.Split(string(data), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		switch fields[0] {
+		case "MemTotal:":
+			memTotal, _ = strconv.ParseInt(fields[1], 10, 64)
+		case "MemFree:":
+			memFree, _ = strconv.ParseInt(fields[1], 10, 64)
+		case "Buffers:":
+			buffers, _ = strconv.ParseInt(fields[1], 10, 64)
+		case "Cached:":
+			cached, _ = strconv.ParseInt(fields[1], 10, 64)
+		}
+	}
+	totalGB := float64(memTotal) / 1024 / 1024
+	usedGB := float64(memTotal-memFree-buffers-cached) / 1024 / 1024
+	return usedGB, totalGB
+}
+
+// getCPUUsage returns overall CPU usage percentage (0-100) from /proc/stat.
+func getCPUUsage() float64 {
+	data, err := os.ReadFile("/proc/stat")
+	if err != nil {
+		return 0
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		if !strings.HasPrefix(line, "cpu ") {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		var total, idle uint64
+		for i := 1; i < len(fields); i++ {
+			v, _ := strconv.ParseUint(fields[i], 10, 64)
+			total += v
+			if i == 4 {
+				idle = v
+			}
+		}
+		if total > 0 {
+			return (1.0 - float64(idle)/float64(total)) * 100
+		}
+	}
+	return 0
+}
+
+// getDiskUsage returns used disk space in GB for the root filesystem.
+func getDiskUsage() float64 {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs("/", &stat); err != nil {
+		return 0
+	}
+	used := (int64(stat.Blocks) - int64(stat.Bfree)) * int64(stat.Bsize)
+	return float64(used) / 1024 / 1024 / 1024
+}
+
+// getDiskTotal returns total disk space in GB for the root filesystem.
+func getDiskTotal() float64 {
+	var stat syscall.Statfs_t
+	if err := syscall.Statfs("/", &stat); err != nil {
+	 return 0
+	}
+	total := int64(stat.Blocks) * int64(stat.Bsize)
+	return float64(total) / 1024 / 1024 / 1024
+}
+
+// getDiskPercent returns disk usage percentage (0-100) for the root filesystem.
+func getDiskPercent() float64 {
+	used := getDiskUsage()
+	total := getDiskTotal()
+	if total > 0 {
+		return (used / total) * 100
+	}
+	return 0
 }
 

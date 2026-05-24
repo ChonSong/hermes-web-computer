@@ -36,7 +36,7 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | File explorer context menu | WAYBAR-SPEC.md §5.5 | ⚪ not-started | — | Open/Rename/Delete/Copy Path |
 | Bottom terminal panel tabs | WAYBAR-SPEC.md §6 | ⚪ not-started | — | Terminal/Problems/Output/Ports |
 | Bottom panel resize | WAYBAR-SPEC.md §6.1 | ⚪ not-started | — | Drag handle, persist height |
-| Menu bar | WAYBAR-SPEC.md §9 | ⚪ not-started | — | File/Edit/View/Go/Run/Terminal/Help |
+| Menu bar | WAYBAR-SPEC.md §9 | ✅ Complete | 2026-05-24 | MenuBar.svelte — File/Edit/View/Go/Run/Terminal/Help with keyboard shortcuts; Alt+F/E/V/G/R/T/H to open menus |
 
 **Backend dependencies (for system tray):**
 | Dependency | Status | Notes |
