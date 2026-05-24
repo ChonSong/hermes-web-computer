@@ -1,0 +1,158 @@
+# FEATURE-TRACKER.md — hermes-web-computer
+
+> Single source of truth for feature status. Update after every commit.
+
+**Last updated:** 2026-05-24
+**v1.2 tag:** `ef343b0` (docs + README update)
+
+---
+
+## Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Complete and merged |
+| 🟡 | In progress (actively being worked) |
+| ⚪ | Not started |
+| ❌ | Blocked / broken |
+| 🔶 | Partially complete (known gaps) |
+
+---
+
+## Waybar + Shell (Priority 1)
+
+Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec.
+
+| Feature | Spec section | Status | Last Updated | Notes |
+|---------|-------------|--------|-------------|-------|
+| Waybar top bar | WAYBAR-SPEC.md §2 | ⚪ not-started | — | Workspace pill + system tray |
+| Clickable workspace indicators | WAYBAR-SPEC.md §4 | ⚪ not-started | — | Replace keyboard-only Shift+1-9 |
+| Window title in Waybar | WAYBAR-SPEC.md §2 | ⚪ not-started | — | Subscribe to `ui.focus.changed` |
+| System tray (wifi/volume/battery/temp) | WAYBAR-SPEC.md §2.3 | ⚪ not-started | — | Backend metrics endpoint needed |
+| Dock: click-to-launch tiles | WAYBAR-SPEC.md §3 | ⚪ not-started | — | Currently launches panels, not tiles |
+| Dock: running indicator dot | WAYBAR-SPEC.md §3.2 | ⚪ not-started | — | Purple dot for open apps |
+| Dock: pin/unpin apps | WAYBAR-SPEC.md §3.3 | ⚪ not-started | — | Right-click context menu |
+| File explorer sidebar | WAYBAR-SPEC.md §5 | ⚪ not-started | — | VSCode-style collapsible tree |
+| File explorer context menu | WAYBAR-SPEC.md §5.5 | ⚪ not-started | — | Open/Rename/Delete/Copy Path |
+| Bottom terminal panel tabs | WAYBAR-SPEC.md §6 | ⚪ not-started | — | Terminal/Problems/Output/Ports |
+| Bottom panel resize | WAYBAR-SPEC.md §6.1 | ⚪ not-started | — | Drag handle, persist height |
+| Menu bar | WAYBAR-SPEC.md §9 | ⚪ not-started | — | File/Edit/View/Go/Run/Terminal/Help |
+
+**Backend dependencies (for system tray):**
+| Dependency | Status | Notes |
+|------------|--------|-------|
+| Host metrics endpoint (CPU/mem/net/temp) | ⚪ not-started | `/api/system/metrics` returning host data |
+| Audio status from Fun-Audio-Chat | ⚪ not-started | Subscribed to audio state events |
+| Wifi/network status | ⚪ not-started | Netifaces or similar |
+
+---
+
+## App Tiles
+
+| Tile | Status | Last Updated | Notes |
+|------|--------|-------------|-------|
+| Terminal (xterm.js) | ✅ Complete | v1.2 | Lazy-loaded, PTY via backend |
+| Monaco Editor | ✅ Complete | v1.2 | Read-only with Ctrl+S write-back |
+| Browser (chromedp) | ✅ Complete | v1.2 | Navigate/click/input/screenshot |
+| Chat Panel | ✅ Complete | v1.2 | Hermes Agent SSE streaming |
+| File Manager (Dash) | ✅ Complete | v1.2 | Browse/preview/edit/create/delete |
+| System Status (Dash) | 🔶 Partial | v1.2 | Placeholder data, needs real sysinfo |
+| Analytics (Dash) | 🔶 Partial | v1.2 | Placeholder data, needs telemetry wire |
+| Observability (Dash) | 🔶 Partial | v1.2 | Event feed, needs telemetry |
+| Calculator | ⚪ not-started | — | Simple web app tile |
+| Calendar | ⚪ not-started | — | Web app tile |
+| Music Player | ⚪ not-started | — | Spotify integration possible |
+| Camera | ⚪ not-started | — | MediaDevices API |
+
+---
+
+## Backend Packages
+
+| Package | File | Status | Notes |
+|---------|------|--------|-------|
+| WebSocket Multiplexer | `ws/multiplexer.go` | ✅ Complete | ui/agent/audio protocols |
+| PTY Supervisor | `pty/supervisor.go` | ✅ Complete | 1MB ring buffer + checkpoint |
+| Layout Tree | `layout/tree.go` | ✅ Complete | Split/mount/unmount/resize/swap/fullscreen |
+| Security Enforcer | `security/security.go` | ✅ Complete | YAML tiers + token gating |
+| Session Store | `session/store.go` | ✅ Complete | JSON file-based |
+| Browser Manager | `browser/browser.go` | ✅ Complete | chromedp headless |
+| LLM Router | `llm/router.go` | ✅ Complete | Multi-provider (not yet wired to UI) |
+| MCP Client | `mcp/client.go` | ✅ Complete | JSON-RPC 2.0 stdio |
+| Audio Bridge | `audio/bridge.go` | ✅ Complete | Fun-Audio-Chat relay |
+| Telemetry | `telemetry/telemetry.go` | ✅ Complete | JSONL ring buffer + async sync |
+| Config Manager | `config/manager.go` | ✅ Complete | YAML read/write + env vars |
+| Docker Manager | `docker/manager.go` | ✅ Complete | CLI wrapper |
+| Agent Streamer | `agent/streamer.go` | ✅ Complete | SSE client for Hermes |
+| Host Metrics | `ws/metrics.go` | ⚪ not-started | CPU/mem/net/temp for Waybar |
+
+---
+
+## xpra Escape Hatch
+
+| Component | Plan doc | Status | Notes |
+|-----------|----------|--------|-------|
+| xpra server setup | XPRA-INTEGRATION.md | ⚪ not-started | Install on host, HTML5 mode |
+| `xpra/manager.go` | XPRA-INTEGRATION.md | ⚪ not-started | Go manager for sessions |
+| `XpraTile.svelte` | XPRA-INTEGRATION.md | ⚪ not-started | Iframe tile component |
+| SSH tunnel support | XPRA-INTEGRATION.md | ⚪ not-started | Browser → host xpra |
+
+---
+
+## Multi-User / Team Support
+
+| Component | Plan doc | Status | Notes |
+|-----------|----------|--------|-------|
+| Multi-user architecture | MULTI-USER-PLAN.md | ⚪ not-started | Per-user layout trees |
+| OIDC auth (Keycloak) | MULTI-USER-PLAN.md §M1 | ⚪ not-started | Token validation middleware |
+| Coder workspace lifecycle | MULTI-USER-PLAN.md §M2 | ⚪ not-started | Provision/suspend/delete |
+| Shared tiles (collaborative) | MULTI-USER-PLAN.md §M3 | ⚪ not-started | CRDT or leader-follower |
+| RBAC + audit | MULTI-USER-PLAN.md §M4 | ⚪ not-started | Admin/user/viewer roles |
+
+---
+
+## Infrastructure
+
+| Item | Status | Notes |
+|------|--------|-------|
+| Go tests (45+) | ✅ Passing | `go test ./... -count=1 -timeout=120s` |
+| Playwright E2E (17+) | ✅ Passing | Layout, resize, chaos, a11y, perf |
+| Theme (solid #191919) | ✅ Complete | ΔE<8 vs reference, verified 2026-05-24 |
+| CI pipeline | ✅ Passing | GitHub Actions |
+| Cloudflare tunnel | ✅ Running | hermes-webui tunnel |
+| Port | ⚠️ Wrong | Legacy port 3001/3113 — **HWC runs on 3005** |
+
+---
+
+## Cron Jobs
+
+| Job | Schedule | Status | Last Run | Notes |
+|-----|----------|--------|----------|-------|
+| Rebuild + deploy check | every 240m | ⚠️ Path wrong | ok | Points to `/opt/data/hermes-web-computer` — should be `/home/sean/.hermes/hermes-web-computer` |
+| HWC canary watch | every 360m | ⚠️ Port wrong | ok | Targets `:3001` — should be `:3005` |
+| HWC Visual QA | every 720m | ❌ Error | error | Targets `:3113` — should be `:3005`; wrong skill |
+| Phase Engine | hourly | ❌ Error | error | State dir doesn't exist — disabled, use manual |
+| Nightly build health | not set | ⚪ not-started | — | `go build + go test + npm run build` → 2am Sydney |
+
+---
+
+## Open Questions
+
+| Question | Status | Resolution |
+|----------|--------|------------|
+| Waybar glassmorphism or solid? | 🔶 | Spec says glass, but theme changed to solid #191919 (2026-05-23). Need to reconcile spec with implemented theme. |
+| Workspace 0 as scratchpad? | ⚪ | Not implemented — currently 9 workspaces (1-9) |
+| `fs.watch` for file changes? | ⚪ | Marked future in PLAN.md |
+| Dashboard tiles real data? | 🔶 | Backend handlers return placeholder — need telemetry/sysinfo wiring |
+
+---
+
+## Next Action
+
+**Priority:** Build Waybar.svelte — top bar with clickable workspace indicators.
+
+**Prerequisite:** Host metrics endpoint (`GET /api/system/metrics` → CPU/mem/net/temp/audio) for system tray icons.
+
+**Start with:**
+1. Backend: `backend/ws/metrics.go` — expose host system metrics
+2. Frontend: `Waybar.svelte` — workspace pill + system tray container
+3. Integrate into `App.svelte` top slot
