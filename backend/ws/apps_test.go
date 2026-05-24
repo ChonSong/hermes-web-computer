@@ -67,8 +67,8 @@ func TestAppsList(t *testing.T) {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
 
-	if len(result.Apps) != 4 {
-		t.Fatalf("expected 4 app types, got %d", len(result.Apps))
+	if len(result.Apps) != 5 {
+		t.Fatalf("expected 5 app types, got %d", len(result.Apps))
 	}
 
 	expected := map[string]string{
@@ -76,6 +76,7 @@ func TestAppsList(t *testing.T) {
 		"editor":   "Editor",
 		"preview":  "Preview",
 		"browser":  "Browser",
+		"xpra":     "Xpra",
 	}
 	for _, app := range result.Apps {
 		wantName, ok := expected[app.ID]
