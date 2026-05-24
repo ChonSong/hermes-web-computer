@@ -5,7 +5,7 @@
   import ResizeHandle from "./components/ResizeHandle.svelte"
   import CommandPalette from "./components/CommandPalette.svelte"
   import KeymapOverlay from "./components/KeymapOverlay.svelte"
-  import WorkspacePill from "./components/WorkspacePill.svelte"
+  import Waybar from "./components/Waybar.svelte"
   import Dock from "./components/Dock.svelte"
   import { workspaceStore, setActiveWorkspace, moveTileToWorkspace, toggleFloating } from "./stores/workspace"
   import { ws, send, focus, layout, type LayoutTree } from "./stores/ws"
@@ -231,7 +231,7 @@
   {/if}
 
   <!-- Illogical Impulse overlay components -->
-  <WorkspacePill />
+  <Waybar />
   <Dock />
 </div>
 
