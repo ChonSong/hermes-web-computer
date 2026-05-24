@@ -56,9 +56,9 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Browser (chromedp) | ✅ Complete | v1.2 | Navigate/click/input/screenshot |
 | Chat Panel | ✅ Complete | v1.2 | Hermes Agent SSE streaming |
 | File Manager (Dash) | ✅ Complete | v1.2 | Browse/preview/edit/create/delete |
-| System Status (Dash) | 🔶 Partial | v1.2 | Placeholder data, needs real sysinfo |
-| Analytics (Dash) | 🔶 Partial | v1.2 | Placeholder data, needs telemetry wire |
-| Observability (Dash) | 🔶 Partial | v1.2 | Event feed, needs telemetry |
+| System Status (Dash) | ✅ Complete | v1.3 | Real sysinfo from Phase 9 backend handlers |
+| Analytics (Dash) | ✅ Complete | v1.3 | Real telemetry from Phase 9 analytics.get |
+| Observability (Dash) | ✅ Complete | v1.3 | Real event feed from Phase 9 dashboard.stats |
 | Calculator | ⚪ not-started | — | Simple web app tile |
 | Calendar | ⚪ not-started | — | Web app tile |
 | Music Player | ⚪ not-started | — | Spotify integration possible |
