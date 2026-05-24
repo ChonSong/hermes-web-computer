@@ -34,8 +34,8 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Dock: pin/unpin apps | WAYBAR-SPEC.md §3.3 | ✅ Complete | 2026-05-24 | Right-click context menu with pin/unpin toggle, new instance, focus/launch options |
 | File explorer sidebar | WAYBAR-SPEC.md §5 | ✅ Complete | 2026-05-24 | VSCode-style collapsible tree with ▶/▼ chevrons; `expandedPaths` Set tracks open dirs; `currentPath` with breadcrumb nav |
 | File explorer context menu | WAYBAR-SPEC.md §5.5 | ✅ Complete | 2026-05-24 | Right-click: Open/Rename/Delete/Copy Path; inline rename with Enter/Escape; delete confirmation |
-| Bottom terminal panel tabs | WAYBAR-SPEC.md §6 | ⚪ not-started | — | Terminal/Problems/Output/Ports |
-| Bottom panel resize | WAYBAR-SPEC.md §6.1 | ⚪ not-started | — | Drag handle, persist height |
+| Bottom terminal panel tabs | WAYBAR-SPEC.md §6 | ✅ Complete | 2026-05-24 | BottomPanel.svelte: Terminal/Problems/Output/Ports tabs, drag-to-resize, Ctrl+\` toggle, multi-tab support |
+| Bottom panel resize | WAYBAR-SPEC.md §6.1 | ✅ Complete | 2026-05-24 | Drag handle at top, 120–600px range, persists to localStorage |
 | Menu bar | WAYBAR-SPEC.md §9 | ⚪ not-started | — | File/Edit/View/Go/Run/Terminal/Help |
 
 **Backend dependencies (for system tray):**
