@@ -32,8 +32,8 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Dock: click-to-launch tiles | WAYBAR-SPEC.md §3 | ✅ Complete | 2026-05-24 | Click tile items → apps.launch + layout.update split; panel items dispatch hwc-dock-panel event |
 | Dock: running indicator dot | WAYBAR-SPEC.md §3.2 | ✅ Complete | 2026-05-24 | Purple dot for running tiles; white/40 dot for pinned-but-not-running; layout tree subscription tracks active tiles |
 | Dock: pin/unpin apps | WAYBAR-SPEC.md §3.3 | ✅ Complete | 2026-05-24 | Right-click context menu with pin/unpin toggle, new instance, focus/launch options |
-| File explorer sidebar | WAYBAR-SPEC.md §5 | ⚪ not-started | — | VSCode-style collapsible tree |
-| File explorer context menu | WAYBAR-SPEC.md §5.5 | ⚪ not-started | — | Open/Rename/Delete/Copy Path |
+| File explorer sidebar | WAYBAR-SPEC.md §5 | ✅ Complete | 2026-05-24 | VSCode-style collapsible tree with ▶/▼ chevrons; `expandedPaths` Set tracks open dirs; `currentPath` with breadcrumb nav |
+| File explorer context menu | WAYBAR-SPEC.md §5.5 | ✅ Complete | 2026-05-24 | Right-click: Open/Rename/Delete/Copy Path; inline rename with Enter/Escape; delete confirmation |
 | Bottom terminal panel tabs | WAYBAR-SPEC.md §6 | ⚪ not-started | — | Terminal/Problems/Output/Ports |
 | Bottom panel resize | WAYBAR-SPEC.md §6.1 | ⚪ not-started | — | Drag handle, persist height |
 | Menu bar | WAYBAR-SPEC.md §9 | ⚪ not-started | — | File/Edit/View/Go/Run/Terminal/Help |
