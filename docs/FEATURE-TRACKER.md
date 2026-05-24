@@ -29,9 +29,9 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Clickable workspace indicators | WAYBAR-SPEC.md §4 | ✅ Complete | 2026-05-24 | Click dot → setActiveWorkspace(n) — keyboard still works (Shift+1-9) |
 | Window title in Waybar | WAYBAR-SPEC.md §2 | ✅ Complete | 2026-05-24 | Subscribes to ui.focus.changed WS event |
 | System tray (wifi/volume/battery/temp) | WAYBAR-SPEC.md §2.3 | ✅ Complete | 2026-05-24 | Backend extended: Wifi/Battery/Volume fields in SystemMetrics; frontend wired: dim on disconnect, red on critical |
-| Dock: click-to-launch tiles | WAYBAR-SPEC.md §3 | ⚪ not-started | — | Currently launches panels, not tiles |
-| Dock: running indicator dot | WAYBAR-SPEC.md §3.2 | ⚪ not-started | — | Purple dot for open apps |
-| Dock: pin/unpin apps | WAYBAR-SPEC.md §3.3 | ⚪ not-started | — | Right-click context menu |
+| Dock: click-to-launch tiles | WAYBAR-SPEC.md §3 | ✅ Complete | 2026-05-24 | Click tile items → apps.launch + layout.update split; panel items dispatch hwc-dock-panel event |
+| Dock: running indicator dot | WAYBAR-SPEC.md §3.2 | ✅ Complete | 2026-05-24 | Purple dot for running tiles; white/40 dot for pinned-but-not-running; layout tree subscription tracks active tiles |
+| Dock: pin/unpin apps | WAYBAR-SPEC.md §3.3 | ✅ Complete | 2026-05-24 | Right-click context menu with pin/unpin toggle, new instance, focus/launch options |
 | File explorer sidebar | WAYBAR-SPEC.md §5 | ⚪ not-started | — | VSCode-style collapsible tree |
 | File explorer context menu | WAYBAR-SPEC.md §5.5 | ⚪ not-started | — | Open/Rename/Delete/Copy Path |
 | Bottom terminal panel tabs | WAYBAR-SPEC.md §6 | ⚪ not-started | — | Terminal/Problems/Output/Ports |
