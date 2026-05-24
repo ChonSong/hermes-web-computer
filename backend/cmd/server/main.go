@@ -27,6 +27,11 @@ func main() {
 	mux := ws.NewMultiplexer()
 	mux.SetAudioBridge(audio.NewBridge(audioURL))
 
+	// Initialize Xpra manager on a fixed display
+	if err := mux.InitializeXpra(10); err != nil {
+		log.Printf("xpra initialization skipped (xpra may not be installed): %v", err)
+	}
+
 	// Start telemetry sync if endpoint configured
 	if endpoint := os.Getenv("TELEMETRY_ENDPOINT"); endpoint != "" {
 		if syncer := mux.GetTelemetrySyncer(); syncer != nil {

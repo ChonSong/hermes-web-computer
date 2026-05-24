@@ -6,6 +6,7 @@
   import DashOverview from "./DashOverview.svelte"
   import DashFileManager from "./DashFileManager.svelte"
   import DashSystemStatus from "./DashSystemStatus.svelte"
+  import XpraTile from "./XpraTile.svelte"
   import { send, focus } from "../stores/ws"
   import type { LayoutTree } from "../stores/ws"
   import { fade } from "svelte/transition"
@@ -102,6 +103,8 @@
       {/if}
     {:else if node.content === 'dash-system-status'}
       <DashSystemStatus />
+    {:else if node.content === 'xpra'}
+      <XpraTile httpUrl={node.http_url ?? 'http://localhost:9453'} display={node.display ?? ':10'} />
     {:else if node.content === 'welcome'}
       <div class="flex items-center justify-center h-full text-gray-400">
         <div class="text-center">

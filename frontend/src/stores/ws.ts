@@ -26,6 +26,8 @@ export interface LayoutTree {
   pty_id?: string
   browser_id?: string
   size?: number
+  http_url?: string
+  display?: string
 }
 
 export interface LayoutOp {

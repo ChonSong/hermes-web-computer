@@ -32,6 +32,7 @@ import (
 	"hermes-web-computer/backend/session"
 	"hermes-web-computer/backend/state"
 	"hermes-web-computer/backend/telemetry"
+	"hermes-web-computer/backend/xpra"
 )
 
 // Envelope is the JSON-RPC message format for the single WebSocket multiplexer.
@@ -70,6 +71,7 @@ type Multiplexer struct {
 	configMgr   *config.Manager
 	dockerMgr   *docker.Manager
 	mcpMgr      *mcp.Manager
+xpraMgr     *xpra.Manager
 	startTime   time.Time // server start time for uptime calculation
 }
 
@@ -85,6 +87,24 @@ func (m *Multiplexer) SetDockerManager(dm *docker.Manager) {
 	m.mu.Lock()
 	m.dockerMgr = dm
 	m.mu.Unlock()
+}
+
+// SetXpraManager attaches the Xpra manager to the multiplexer.
+func (m *Multiplexer) SetXpraManager(xm *xpra.Manager) {
+	m.mu.Lock()
+	m.xpraMgr = xm
+	m.mu.Unlock()
+}
+
+// InitializeXpra initializes the Xpra manager with a display number.
+func (m *Multiplexer) InitializeXpra(displayNum int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.xpraMgr != nil {
+		return nil
+	}
+	m.xpraMgr = xpra.New("default", displayNum)
+	return nil
 }
 
 // Session represents a single WebSocket connection.
@@ -183,6 +203,8 @@ func (m *Multiplexer) Router() http.Handler {
 		w.Write([]byte("ok"))
 	})
 	mux.HandleFunc("/api/system/metrics", ServeMetricsHTTP)
+	// Xpra HTML5 proxy — only register if Xpra manager is initialized
+	mux.HandleFunc("/api/xpra/", m.handleXpraProxy)
 	// Serve static frontend files - check absolute path first to avoid stale dist dirs
 	distPaths := []string{
 		"/opt/data/hermes-web-computer/frontend/dist",
@@ -198,6 +220,21 @@ func (m *Multiplexer) Router() http.Handler {
 		}
 	}
 	return mux
+}
+
+// handleXpraProxy proxies /api/xpra/* requests to the Xpra HTML5 server.
+func (m *Multiplexer) handleXpraProxy(w http.ResponseWriter, r *http.Request) {
+	m.mu.RLock()
+	xm := m.xpraMgr
+	m.mu.RUnlock()
+
+	if xm == nil || !xm.IsRunning() {
+		http.Error(w, "Xpra not available (not installed or not started)", 503)
+		return
+	}
+
+	proxy := xpra.NewProxyHandler(xm)
+	proxy.ServeHTTP(w, r)
 }
 
 func (m *Multiplexer) HandleWebSocket(w http.ResponseWriter, r *http.Request) {
@@ -369,6 +406,9 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 
 	case "fs.stat":
 		m.handleFSStat(sess, env.Params)
+
+	case "fs.rename":
+		m.handleFSRename(sess, env.Params)
 
 	case "apps.list":
 		m.handleAppsList(sess)
@@ -608,7 +648,7 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 		}
 		m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.status", Data: json.RawMessage(mustMarshal(status))})
 
-	case "fs.delete":
+case "fs.delete":
 		var params struct {
 			Path string `json:"path"`
 		}
@@ -616,7 +656,12 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
 			return
 		}
-		if err := os.RemoveAll(params.Path); err != nil {
+		cleanPath, err := sanitizePath(params.Path)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if err := os.RemoveAll(cleanPath); err != nil {
 			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
 			return
 		}

@@ -7,9 +7,12 @@
   import KeymapOverlay from "./components/KeymapOverlay.svelte"
   import Waybar from "./components/Waybar.svelte"
   import Dock from "./components/Dock.svelte"
+  import BottomPanel from "./components/BottomPanel.svelte"
+  import MenuBar from "./components/MenuBar.svelte"
   import { workspaceStore, setActiveWorkspace, moveTileToWorkspace, toggleFloating } from "./stores/workspace"
   import { ws, send, focus, layout, type LayoutTree } from "./stores/ws"
   import { setContext, getContext } from "svelte"
+  import { onMount } from "svelte"
 
   let connected = $derived($ws.connected)
   let showPalette = $state(false)
@@ -183,7 +186,44 @@
       toggleFloating(currentFocus)
       return
     }
+
+    // Alt+F/E/V/G/R/T/H: menu bar shortcuts
+    if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+      const menuMap: Record<string, () => void> = {
+        "f": () => window.dispatchEvent(new CustomEvent("hwc-open-menu", { detail: "file" })),
+        "e": () => window.dispatchEvent(new CustomEvent("hwc-open-menu", { detail: "edit" })),
+        "v": () => window.dispatchEvent(new CustomEvent("hwc-open-menu", { detail: "view" })),
+        "g": () => window.dispatchEvent(new CustomEvent("hwc-open-menu", { detail: "go" })),
+        "r": () => window.dispatchEvent(new CustomEvent("hwc-open-menu", { detail: "run" })),
+        "t": () => window.dispatchEvent(new CustomEvent("hwc-open-menu", { detail: "terminal" })),
+        "h": () => window.dispatchEvent(new CustomEvent("hwc-open-menu", { detail: "help" })),
+      }
+      const handler = menuMap[e.key.toLowerCase()]
+      if (handler) { e.preventDefault(); handler(); return }
+    }
   }, true)
+
+  // Listen for menu bar custom events
+  function handleToggleLeft() { showLeft = !showLeft }
+  function handleToggleRight() { showRight = !showRight }
+  function handleToggleBottom() {} // BottomPanel has its own Ctrl+` toggle
+  function handleTogglePalette() { showPalette = !showPalette }
+  function handleToggleKeymap() { showKeymap = !showKeymap }
+
+  onMount(() => {
+    window.addEventListener("hwc-toggle-left-panel", handleToggleLeft)
+    window.addEventListener("hwc-toggle-right-panel", handleToggleRight)
+    window.addEventListener("hwc-toggle-bottom-panel", handleToggleBottom)
+    window.addEventListener("hwc-toggle-palette", handleTogglePalette)
+    window.addEventListener("hwc-toggle-keymap", handleToggleKeymap)
+    return () => {
+      window.removeEventListener("hwc-toggle-left-panel", handleToggleLeft)
+      window.removeEventListener("hwc-toggle-right-panel", handleToggleRight)
+      window.removeEventListener("hwc-toggle-bottom-panel", handleToggleBottom)
+      window.removeEventListener("hwc-toggle-palette", handleTogglePalette)
+      window.removeEventListener("hwc-toggle-keymap", handleToggleKeymap)
+    }
+  })
 
   // Provide workspace state via context for WorkspacePill
   setContext("activeWorkspace", {
@@ -193,6 +233,9 @@
 </script>
 
 <div class="h-screen w-screen text-gray-100 overflow-hidden relative">
+  <!-- Menu Bar — top of screen -->
+  <MenuBar />
+
   <!-- Gradient background layer -->
   <div class="fixed inset-0 -z-20 bg-[#0a0a0f]"></div>
 
@@ -233,6 +276,7 @@
   <!-- Illogical Impulse overlay components -->
   <Waybar />
   <Dock />
+  <BottomPanel />
 </div>
 
 <CommandPalette bind:visible={showPalette} />

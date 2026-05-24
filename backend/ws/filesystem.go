@@ -12,6 +12,9 @@ import (
 
 // allowedRoot is the base directory for all filesystem operations.
 // Defaults to the repo root. Override via HERMES_HWC_ROOT env var for testing.
+// Lazily initialized so TestMain can set HERMES_HWC_ROOT before first use.
+var allowedRoot string
+
 func getAllowedRoot() string {
 	if root := os.Getenv("HERMES_HWC_ROOT"); root != "" {
 		return root
@@ -24,28 +27,33 @@ func getAllowedRoot() string {
 	return "/home/hermeswebui/.hermes/hermes-web-computer"
 }
 
-var allowedRoot = getAllowedRoot()
+func allowedRootLazy() string {
+	if allowedRoot == "" {
+		allowedRoot = getAllowedRoot()
+	}
+	return allowedRoot
+}
 
 // sanitizePath ensures the requested path doesn't escape the allowed root.
 func sanitizePath(reqPath string) (string, error) {
 	if reqPath == "" || reqPath == "/" {
-		return allowedRoot, nil
+		return allowedRootLazy(), nil
 	}
 	clean := filepath.Clean(reqPath)
 	// Remove leading slash and join with allowed root
 	clean = strings.TrimPrefix(clean, "/")
 	if clean == "" {
-		return allowedRoot, nil
+		return allowedRootLazy(), nil
 	}
-	clean = filepath.Join(allowedRoot, clean)
+	clean = filepath.Join(allowedRootLazy(), clean)
 	resolved, err := filepath.EvalSymlinks(clean)
 	if err != nil {
-		if !strings.HasPrefix(filepath.Clean(clean), filepath.Clean(allowedRoot)) {
+		if !strings.HasPrefix(filepath.Clean(clean), filepath.Clean(allowedRootLazy())) {
 			return "", fmt.Errorf("path escapes allowed root")
 		}
 		return clean, nil
 	}
-	if !strings.HasPrefix(resolved, filepath.Clean(allowedRoot)) {
+	if !strings.HasPrefix(resolved, filepath.Clean(allowedRootLazy())) {
 		return "", fmt.Errorf("path escapes allowed root")
 	}
 	return resolved, nil
@@ -235,5 +243,38 @@ func (m *Multiplexer) handleFSStat(sess *Session, params json.RawMessage) {
 		"size":    info.Size(),
 		"mod_time": info.ModTime().Format(time.RFC3339),
 		"is_dir":  info.IsDir(),
+	})})
+}
+
+func (m *Multiplexer) handleFSRename(sess *Session, params json.RawMessage) {
+	var p struct {
+		OldPath string `json:"old_path"`
+		NewPath string `json:"new_path"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		sess.Send(Event{Protocol: "ui", Event: "fs.error", Data: mustMarshal(map[string]string{"message": err.Error()})})
+		return
+	}
+
+	cleanOld, err := sanitizePath(p.OldPath)
+	if err != nil {
+		sess.Send(Event{Protocol: "ui", Event: "fs.error", Data: mustMarshal(map[string]interface{}{"message": err.Error(), "path": p.OldPath})})
+		return
+	}
+
+	cleanNew, err := sanitizePath(p.NewPath)
+	if err != nil {
+		sess.Send(Event{Protocol: "ui", Event: "fs.error", Data: mustMarshal(map[string]interface{}{"message": err.Error(), "path": p.NewPath})})
+		return
+	}
+
+	if err := os.Rename(cleanOld, cleanNew); err != nil {
+		sess.Send(Event{Protocol: "ui", Event: "fs.error", Data: mustMarshal(map[string]string{"message": err.Error()})})
+		return
+	}
+
+	sess.Send(Event{Protocol: "ui", Event: "fs.rename.success", Data: mustMarshal(map[string]interface{}{
+		"old_path": cleanOld,
+		"new_path": cleanNew,
 	})})
 }

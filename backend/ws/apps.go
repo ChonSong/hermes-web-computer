@@ -1,6 +1,7 @@
 package ws
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -22,6 +23,7 @@ func (m *Multiplexer) handleAppsList(sess *Session) {
 		{ID: "editor", Name: "Editor", Icon: "📝"},
 		{ID: "preview", Name: "Preview", Icon: "👁"},
 		{ID: "browser", Name: "Browser", Icon: "🌐"},
+		{ID: "xpra", Name: "Xpra", Icon: "🪟"},
 	}
 	sess.Send(Event{Protocol: "ui", Event: "apps.list.response", Data: mustMarshal(map[string]interface{}{"apps": apps})})
 }
@@ -82,6 +84,37 @@ func (m *Multiplexer) handleAppsLaunch(sess *Session, params json.RawMessage) {
 		sess.Send(Event{Protocol: "ui", Event: "apps.launch.response", Data: mustMarshal(map[string]interface{}{
 			"type": p.Type,
 			"note": "panel feature - no tile launched",
+		})})
+
+	case "xpra":
+		// XPra escape hatch — start the Xpra server and report the session URL
+		m.mu.RLock()
+		xm := m.xpraMgr
+		m.mu.RUnlock()
+
+		if xm == nil {
+			sess.Send(Event{Protocol: "ui", Event: "apps.error", Data: mustMarshal(map[string]string{
+				"message": "xpra not initialized (HERMES_XPRA_DISPLAY not set or xpra not installed)",
+			})})
+			break
+		}
+
+		if !xm.IsRunning() {
+			// Try to start on first use
+			ctx := context.Background()
+			if err := xm.Start(ctx); err != nil {
+				sess.Send(Event{Protocol: "ui", Event: "apps.error", Data: mustMarshal(map[string]string{
+					"message": fmt.Sprintf("xpra start failed: %v", err),
+				})})
+				break
+			}
+		}
+
+		sess.Send(Event{Protocol: "ui", Event: "apps.launch.response", Data: mustMarshal(map[string]interface{}{
+			"type":      "xpra",
+			"http_url":  xm.HTTPURL(),
+			"display":   xm.Display(),
+			"tile_type": "xpra",
 		})})
 
 	default:
