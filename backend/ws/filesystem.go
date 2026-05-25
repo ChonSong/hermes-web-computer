@@ -278,3 +278,45 @@ func (m *Multiplexer) handleFSRename(sess *Session, params json.RawMessage) {
 		"new_path": cleanNew,
 	})})
 }
+
+func (m *Multiplexer) handleFSDelete(sess *Session, params json.RawMessage) {
+	var p struct {
+		Path string `json:"path"`
+	}
+	if err := json.Unmarshal(params, &p); err != nil {
+		sess.Send(Event{Protocol: "ui", Event: "fs.error", Data: mustMarshal(map[string]string{"message": err.Error()})})
+		return
+	}
+
+	cleanPath, err := sanitizePath(p.Path)
+	if err != nil {
+		sess.Send(Event{Protocol: "ui", Event: "fs.error", Data: mustMarshal(map[string]interface{}{"message": err.Error(), "path": p.Path})})
+		return
+	}
+
+	info, err := os.Stat(cleanPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: mustMarshal(map[string]interface{}{"message": "path does not exist", "path": cleanPath})})
+			return
+		}
+		sess.Send(Event{Protocol: "ui", Event: "fs.error", Data: mustMarshal(map[string]interface{}{"message": err.Error(), "path": cleanPath})})
+		return
+	}
+
+	if info.IsDir() {
+		if err := os.RemoveAll(cleanPath); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: mustMarshal(map[string]string{"message": err.Error()})})
+			return
+		}
+	} else {
+		if err := os.Remove(cleanPath); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: mustMarshal(map[string]string{"message": err.Error()})})
+			return
+		}
+	}
+
+	sess.Send(Event{Protocol: "ui", Event: "fs.delete.success", Data: mustMarshal(map[string]interface{}{
+		"path": cleanPath,
+	})})
+}

@@ -241,6 +241,10 @@ export function fsStat(path: string): string {
   return send({ protocol: "ui", method: "fs.stat", params: { path } })
 }
 
+export function fsRename(oldPath: string, newPath: string): string {
+  return send({ protocol: "ui", method: "fs.rename", params: { old_path: oldPath, new_path: newPath } })
+}
+
 // App helpers
 export function appsList(): string {
   return send({ protocol: "ui", method: "apps.list" })

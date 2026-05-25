@@ -410,6 +410,9 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 	case "fs.rename":
 		m.handleFSRename(sess, env.Params)
 
+	case "fs.delete":
+		m.handleFSDelete(sess, env.Params)
+
 	case "apps.list":
 		m.handleAppsList(sess)
 
