@@ -9,6 +9,7 @@
   import { commandStore, parseCommand } from "../stores/commands.svelte"
   import type { SessionMessage } from "../stores/sessions.svelte"
   import FileUpload from "./FileUpload.svelte"
+  import ResearchCard from "./ResearchCard.svelte"
 
   let messagesEl: HTMLDivElement
   let inputValue = $state("")
@@ -217,24 +218,58 @@
     return Object.keys(data[0] as Record<string, unknown>)
   }
 
-  function renderMessageWithCards(text: string): { type: "text"; content: string } | { type: "url-card"; card: UrlCard } | { type: "json-table"; data: unknown[]; headers: string[] }[] {
-    if (!text) return { type: "text", content: "" }
+  type MessageSegment =
+    | { type: "text"; content: string }
+    | { type: "url"; url: string; title: string }
+    | { type: "json-table"; data: unknown[]; headers: string[] }
 
-    // Try full-text JSON first
+  function renderMessageWithCards(text: string): MessageSegment[] {
+    if (!text) return [{ type: "text", content: "" }]
+
+    // Full-text JSON table?
     const fullJson = tryParseJson(text)
-    if (fullJson !== null) {
-      if (Array.isArray(fullJson) && isJsonTable(fullJson)) {
-        return { type: "json-table", data: fullJson as unknown[], headers: getJsonHeaders(fullJson as unknown[]) }
+    if (fullJson !== null && Array.isArray(fullJson) && isJsonTable(fullJson)) {
+      return [{ type: "json-table", data: fullJson as unknown[], headers: getJsonHeaders(fullJson as unknown[]) }]
+    }
+
+    // Split text by URLs and collect segments
+    const parts = text.split(URL_REGEX)
+    if (parts.length === 1) {
+      // No URLs — return as plain text
+      return [{ type: "text", content: text }]
+    }
+
+    const segments: MessageSegment[] = []
+    let match: RegExpExecArray | null
+    // Reset lastIndex before iterating
+    URL_REGEX.lastIndex = 0
+    while ((match = URL_REGEX.exec(text)) !== null) {
+      const before = text.slice(URL_REGEX.lastIndex - match[0].length, URL_REGEX.lastIndex - match[0].length)
+      if (before) segments.push({ type: "text", content: before })
+      const url = match[0].trim()
+      if (url) segments.push({ type: "url", url, title: getTitle(url) })
+    }
+    // trailing text after last URL
+    const lastIdx = URL_REGEX.lastIndex
+    if (lastIdx < text.length) {
+      segments.push({ type: "text", content: text.slice(lastIdx) })
+    }
+
+    return segments
+  }
+
+  function getTitle(url: string): string {
+    try {
+      const u = new URL(url)
+      const path = u.pathname.replace(/\/$/, "")
+      const parts = path.split("/").filter(Boolean)
+      if (parts.length > 0) {
+        return decodeURIComponent(parts[parts.length - 1].replace(/[-_]/g, " ")) || u.hostname
       }
+      return u.hostname
+    } catch {
+      return url.length > 50 ? url.substring(0, 50) + "…" : url
     }
-
-    // Extract URLs
-    const urls = extractUrls(text)
-    if (urls.length > 0) {
-      return urls.map(card => ({ type: "url-card" as const, card }))
-    }
-
-    return { type: "text", content: text }
   }
 
   // ============================================================
@@ -452,63 +487,22 @@
             </div>
           {/if}
           {#if msg.content}
-            {@const rendered = renderMessageWithCards(msg.content as string)}
-            {#if Array.isArray(rendered)}
-              <!-- URL cards -->
-              {#each rendered as item}
-                {#if item.type === "url-card"}
-                  <a
-                    href={item.card.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="mt-2 flex items-start gap-3 rounded-lg border border-white/10 bg-[#1a1a2e] p-3 hover:border-blue-500/40 hover:bg-[#1e1e38] transition-colors max-w-[85%]"
-                  >
-                    <svg class="w-4 h-4 text-blue-400 flex-none mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-width="2" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke-linecap="round" stroke-linejoin="round"/>
-                      <path stroke-width="2" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                    <div class="flex-1 min-w-0">
-                      <div class="text-white text-sm font-medium truncate">{item.card.title}</div>
-                      {#if item.card.description}
-                        <div class="text-gray-400 text-xs mt-1 truncate">{item.card.description}</div>
-                      {/if}
-                      <div class="text-blue-400 text-xs mt-1 truncate">{item.card.url}</div>
-                    </div>
-                  </a>
-                {/if}
-              {/each}
-            {:else if rendered.type === "json-table"}
-              <div class="mt-2 rounded border border-green-500/30 bg-[#0d2017] overflow-hidden max-w-[85%]">
-                <div class="overflow-x-auto">
-                  <table class="w-full text-xs">
-                    <thead>
-                      <tr class="border-b border-white/10">
-                        {#each rendered.headers as header}
-                          <th class="px-3 py-2 text-left text-green-400 font-mono font-semibold whitespace-nowrap">{header}</th>
-                        {/each}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {#each rendered.data as row, ri}
-                        <tr class="border-b border-white/5 {ri % 2 === 0 ? 'bg-white/[0.02]' : ''}">
-                          {#each rendered.headers as header}
-                            <td class="px-3 py-1.5 text-gray-300 font-mono whitespace-nowrap">{String((row as Record<string, unknown>)[header] ?? '')}</td>
-                          {/each}
-                        </tr>
-                      {/each}
-                    </tbody>
-                  </table>
+            {@const segments = renderMessageWithCards(msg.content as string)}
+            {#each segments as seg}
+              {#if seg.type === "text"}
+                <div class="text-gray-100 text-sm whitespace-pre-wrap">
+                  {#if showSearch && searchQuery}
+                    {@html highlightMatch(seg.content, searchQuery)}
+                  {:else}
+                    {seg.content}
+                  {/if}
                 </div>
-              </div>
-            {:else if rendered.type === "text"}
-              <div class="text-gray-100 text-sm whitespace-pre-wrap">
-                {#if showSearch && searchQuery}
-                  {@html highlightMatch(rendered.content, searchQuery)}
-                {:else}
-                  {rendered.content}
-                {/if}
-              </div>
-            {/if}
+              {:else if seg.type === "url"}
+                <ResearchCard urls={[{ url: seg.url, title: seg.title }]} searchQuery={showSearch ? searchQuery : ""} />
+              {:else if seg.type === "json-table"}
+                <ResearchCard jsonData={seg.data} jsonHeaders={seg.headers} searchQuery={showSearch ? searchQuery : ""} />
+              {/if}
+            {/each}
           {/if}
         </div>
       {:else if msg.role === "tool"}
