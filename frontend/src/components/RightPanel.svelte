@@ -8,9 +8,10 @@
   import SettingsPanel from "./SettingsPanel.svelte"
   import ConfigPanel from "./ConfigPanel.svelte"
   import ObservabilityPanel from "./ObservabilityPanel.svelte"
+  import DockerPanel from "./DockerPanel.svelte"
 
-  // Tab state: Chat | Profiles | Skills | Crons | Memory | Settings | Config | Observability
-  type TabId = "chat" | "profiles" | "skills" | "crons" | "memory" | "settings" | "config" | "observability"
+  // Tab state: Chat | Profiles | Skills | Crons | Memory | Settings | Config | Observability | Containers
+  type TabId = "chat" | "profiles" | "skills" | "crons" | "memory" | "settings" | "config" | "observability" | "containers"
   let activeTab = $state<TabId>("chat")
 
   // Chat state (kept for chat tab)
@@ -187,6 +188,7 @@
       else if (detail.panel === "settings") activeTab = "settings"
       else if (detail.panel === "config") activeTab = "config"
       else if (detail.panel === "observability") activeTab = "observability"
+      else if (detail.panel === "containers") activeTab = "containers"
     }
     window.addEventListener("hwc-dock-panel", handleDockPanel)
 
@@ -332,6 +334,13 @@
       >
         📊 Observe
       </button>
+      <button
+        class="px-3 py-1.5 text-xs font-medium transition-colors rounded-lg
+          {activeTab === 'containers' ? 'text-white bg-white/10' : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'}"
+        onclick={() => activeTab = "containers"}
+      >
+        📦 Containers
+      </button>
     </div>
     <button
       class="w-8 h-8 flex items-center justify-center text-gray-400 hover:text-white transition-colors rounded-lg hover:bg-white/5 shrink-0"
@@ -447,6 +456,8 @@
       <ConfigPanel />
     {:else if activeTab === "observability"}
       <ObservabilityPanel />
+    {:else if activeTab === "containers"}
+      <DockerPanel />
     {/if}
   </div>
 </div>
