@@ -1,7 +1,7 @@
 # Blueprint: HWC v1.4 — Replace Hermes WebUI + Migrate from agent-os
 
 **Created**: 2026-05-25
-**Status**: in-progress (Phase 0-3 complete, Phase 4-5 pending)
+**Status**: in-progress (Phase 0-4 complete, Phase 5 pending)
 **Project**: hermes-web-computer (ChonSong/hermes-web-computer)
 **Inspiration repos**: hermes-workspace (outsourc-e/hermes-workspace), features-list (ChonSong/features-list), agent-os (ChonSong/agent-os), hermes-webui (ChonSong/hermes-webui)
 
