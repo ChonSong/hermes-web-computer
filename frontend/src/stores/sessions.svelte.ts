@@ -155,6 +155,26 @@ class SessionStore {
     send({ protocol: "ui", method: "session.update", params: { id, pinned } })
   }
 
+  async updateTitle(id: string, title: string): Promise<void> {
+    this.sessions = this.sessions.map(s =>
+      s.session_id === id ? { ...s, title } : s
+    )
+    send({ protocol: "ui", method: "session.update", params: { id, title } })
+  }
+
+  async archive(id: string, archived: boolean): Promise<void> {
+    this.sessions = this.sessions.map(s =>
+      s.session_id === id ? { ...s, archived } : s
+    )
+    send({ protocol: "ui", method: "session.update", params: { id, archived } })
+  }
+
+  async duplicate(id: string): Promise<Session | null> {
+    const sess = this.sessions.find(s => s.session_id === id)
+    if (!sess) return null
+    return this.create(sess.workspace, sess.model)
+  }
+
   select(id: string) {
     this.activeId = id
     this.activeSession = this.sessions.find(s => s.session_id === id) ?? null
