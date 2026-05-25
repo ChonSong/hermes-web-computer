@@ -89,12 +89,14 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 
 ## xpra Escape Hatch
 
-| Component | Plan doc | Status | Notes |
-|-----------|----------|--------|-------|
-| xpra server setup | XPRA-INTEGRATION.md | ⚪ not-started | Install on host, HTML5 mode |
-| `xpra/manager.go` | XPRA-INTEGRATION.md | ⚪ not-started | Go manager for sessions |
-| `XpraTile.svelte` | XPRA-INTEGRATION.md | ⚪ not-started | Iframe tile component |
-| SSH tunnel support | XPRA-INTEGRATION.md | ⚪ not-started | Browser → host xpra |
+> ✅ Implemented in Phase 5 — commit `01c1fec`
+
+| Component | Plan doc | Status | Last Updated | Notes |
+|-----------|----------|--------|-------------|-------|
+| xpra server setup | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Install on host, HTML5 mode |
+| `xpra/manager.go` | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Go manager for sessions |
+| `XpraTile.svelte` | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Iframe tile component, 413 lines |
+| SSH tunnel support | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Browser → host xpra |
 
 ---
 
