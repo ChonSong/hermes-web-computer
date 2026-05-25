@@ -54,9 +54,12 @@ func main() {
 	}
 
 	// Config manager
-	configMgr := config.NewManager(filepath.Join(stateDir, "config.yaml"))
+	configMgr, err := config.NewManager()
+	if err != nil {
+		log.Printf("config manager init failed: %v (continuing with defaults)", err)
+	}
 	mux.SetConfigManager(configMgr)
-	log.Printf("config manager initialized at %s", stateDir)
+	log.Printf("config manager initialized")
 
 	mux.SetAudioBridge(audio.NewBridge(audioURL))
 

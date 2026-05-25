@@ -2,6 +2,7 @@
   /**
    * ChatPanel — Session chat UI rendered in a tile.
    * Reads streaming state from sessionStore, sends via sessionStore.send().
+   * Phase 4: Research cards (URL + JSON), connection status, message search.
    */
   import { tick } from "svelte"
   import { sessionStore } from "../stores/sessions.svelte"
@@ -171,6 +172,171 @@
   function handleUploadRemove(id: string) {
     uploadedFiles = uploadedFiles.filter((_, i) => i !== Number(id.split("_")[1]))
   }
+
+  // ============================================================
+  // 4.1 Research Cards — URL detection + JSON data tables
+  // ============================================================
+
+  const URL_REGEX = /https?:\/\/[^\s]+/g
+
+  interface UrlCard {
+    url: string
+    title: string
+    description: string
+  }
+
+  function extractUrls(text: string): UrlCard[] {
+    const matches = text.match(URL_REGEX) ?? []
+    return matches.map(url => ({
+      url,
+      title: url.length > 60 ? url.substring(0, 60) + "…" : url,
+      description: "",
+    }))
+  }
+
+  function tryParseJson(text: string): unknown | null {
+    const trimmed = text.trim()
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) ||
+        (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        return JSON.parse(trimmed)
+      } catch {
+        return null
+      }
+    }
+    return null
+  }
+
+  function isJsonTable(data: unknown): boolean {
+    if (!Array.isArray(data)) return false
+    return data.length > 0 && typeof data[0] === "object" && data[0] !== null
+  }
+
+  function getJsonHeaders(data: unknown[]): string[] {
+    if (!data.length) return []
+    return Object.keys(data[0] as Record<string, unknown>)
+  }
+
+  function renderMessageWithCards(text: string): { type: "text"; content: string } | { type: "url-card"; card: UrlCard } | { type: "json-table"; data: unknown[]; headers: string[] }[] {
+    if (!text) return { type: "text", content: "" }
+
+    // Try full-text JSON first
+    const fullJson = tryParseJson(text)
+    if (fullJson !== null) {
+      if (Array.isArray(fullJson) && isJsonTable(fullJson)) {
+        return { type: "json-table", data: fullJson as unknown[], headers: getJsonHeaders(fullJson as unknown[]) }
+      }
+    }
+
+    // Extract URLs
+    const urls = extractUrls(text)
+    if (urls.length > 0) {
+      return urls.map(card => ({ type: "url-card" as const, card }))
+    }
+
+    return { type: "text", content: text }
+  }
+
+  // ============================================================
+  // 4.3 Message Search
+  // ============================================================
+
+  let showSearch = $state(false)
+  let searchQuery = $state("")
+  let searchInputEl: HTMLInputElement | null = $state(null)
+  let currentMatchIndex = $state(0)
+
+  // Collect all message indexes that match the query
+  let matchingMessageIndexes = $derived.by(() => {
+    if (!searchQuery.trim()) return []
+    const q = searchQuery.toLowerCase()
+    return allMessages
+      .map((msg, i) => ({ msg, i }))
+      .filter(({ msg }) => {
+        const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content)
+        return content.toLowerCase().includes(q)
+      })
+      .map(({ i }) => i)
+  })
+
+  let matchCount = $derived(matchingMessageIndexes.length)
+  let matchLabel = $derived(
+    matchCount === 0
+      ? "No matches"
+      : matchCount === 1
+        ? "1 match"
+        : `${currentMatchIndex + 1} of ${matchCount}`
+  )
+
+  // Navigate to a specific match (scroll into view)
+  function navigateToMatch(idx: number) {
+    const targetIdx = matchingMessageIndexes[idx]
+    if (targetIdx === undefined) return
+    currentMatchIndex = idx
+    tick().then(() => {
+      const container = messagesEl
+      if (!container) return
+      const items = container.querySelectorAll<HTMLElement>("[data-message-index]")
+      const el = items[targetIdx]
+      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" })
+    })
+  }
+
+  function handleSearchKeydown(e: KeyboardEvent) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault()
+      if (matchCount > 0) {
+        navigateToMatch((currentMatchIndex + 1) % matchCount)
+      }
+      return
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault()
+      if (matchCount > 0) {
+        navigateToMatch((currentMatchIndex - 1 + matchCount) % matchCount)
+      }
+      return
+    }
+    if (e.key === "Enter") {
+      e.preventDefault()
+      if (matchCount > 0) {
+        navigateToMatch((currentMatchIndex + 1) % matchCount)
+      }
+      return
+    }
+    if (e.key === "Escape") {
+      showSearch = false
+      searchQuery = ""
+      return
+    }
+  }
+
+  function openSearch() {
+    showSearch = true
+    tick().then(() => searchInputEl?.focus())
+  }
+
+  function closeSearch() {
+    showSearch = false
+    searchQuery = ""
+    currentMatchIndex = 0
+  }
+
+  // Highlight matched text in a string
+  function highlightMatch(text: string, query: string): string {
+    if (!query.trim()) return escapeHtml(text)
+    const escaped = escapeHtml(text)
+    const q = query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    return escaped.replace(new RegExp(q, "gi"), match => `<mark class="bg-yellow-500 text-black rounded px-0.5">${match}</mark>`)
+  }
+
+  function escapeHtml(s: string): string {
+    return s
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+  }
 </script>
 
 <div
@@ -194,23 +360,65 @@
       <div class="text-xs text-gray-400">
         {activeSession?.title ?? "New Chat"} &middot; {activeSession?.model ?? "agent"}
       </div>
-      <!-- Context meter -->
-      <div
-        class="flex items-center gap-2 px-2 py-1 rounded text-xs font-mono"
-        style="border: 1px solid {contextColor(tokenPercent)}40; background: #191919;"
-        title={tokenPercent >= 85 ? "Context usage >85%. Consider compressing or starting a new session." : `Context: ${tokenPercentDisplay}% used`}
+
+      <!-- Search icon -->
+      <button
+        type="button"
+        onclick={openSearch}
+        class="p-1.5 rounded hover:bg-white/10 text-gray-400 hover:text-white transition-colors"
+        title="Search messages (Ctrl+F)"
+        aria-label="Search messages"
       >
-        <span class="text-gray-400">{formatTokens(tokenEstimate)}</span>
-        <div class="w-24 h-2 rounded bg-gray-800 overflow-hidden">
-          <div
-            class="h-full rounded transition-all duration-300"
-            style="width: {tokenPercent}%; background-color: {contextColor(tokenPercent)};"
-          ></div>
-        </div>
-        <span class="text-gray-500">{CONTEXT_WINDOW / 1000}K</span>
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="7" stroke-width="2"/>
+          <path stroke-width="2" d="M16 16l4 4" stroke-linecap="round"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Context meter -->
+    <div
+      class="flex items-center gap-2 px-2 py-1 rounded text-xs font-mono mt-2"
+      style="border: 1px solid {contextColor(tokenPercent)}40; background: #191919;"
+      title={tokenPercent >= 85 ? "Context usage >85%. Consider compressing or starting a new session." : `Context: ${tokenPercentDisplay}% used`}
+    >
+      <span class="text-gray-400">{formatTokens(tokenEstimate)}</span>
+      <div class="w-24 h-2 rounded bg-gray-800 overflow-hidden">
+        <div
+          class="h-full rounded transition-all duration-300"
+          style="width: {tokenPercent}%; background-color: {contextColor(tokenPercent)};"
+        ></div>
       </div>
+      <span class="text-gray-500">{CONTEXT_WINDOW / 1000}K</span>
     </div>
   </div>
+
+  <!-- Search overlay -->
+  {#if showSearch}
+    <div class="flex-none px-4 py-2 bg-[#191919] border-b border-white/10 flex items-center gap-3">
+      <svg class="w-4 h-4 text-gray-400 flex-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <circle cx="11" cy="11" r="7" stroke-width="2"/>
+        <path stroke-width="2" d="M16 16l4 4" stroke-linecap="round"/>
+      </svg>
+      <input
+        bind:this={searchInputEl}
+        bind:value={searchQuery}
+        onkeydown={handleSearchKeydown}
+        placeholder="Search messages…"
+        class="flex-1 bg-transparent text-sm text-white placeholder-gray-500 focus:outline-none"
+        type="text"
+      />
+      <span class="text-xs text-gray-400 font-mono flex-none">{matchLabel}</span>
+      <button
+        type="button"
+        onclick={closeSearch}
+        class="p-1 rounded hover:bg-white/10 text-gray-400 hover:text-white flex-none"
+        aria-label="Close search"
+      >
+        ✕
+      </button>
+    </div>
+  {/if}
 
   <!-- Messages -->
   <div bind:this={messagesEl} class="flex-1 overflow-y-auto px-4 py-3 space-y-4">
@@ -222,13 +430,17 @@
 
     {#each allMessages as msg, i}
       {#if msg.role === "user"}
-        <div class="flex justify-end">
+        <div class="flex justify-end" data-message-index={i}>
           <div class="max-w-[75%] rounded-lg px-3 py-2 bg-blue-600 text-white text-sm">
-            {renderContent(msg)}
+            {#if showSearch && searchQuery}
+              {@html highlightMatch(renderContent(msg), searchQuery)}
+            {:else}
+              {renderContent(msg)}
+            {/if}
           </div>
         </div>
       {:else if msg.role === "assistant"}
-        <div class="flex flex-col">
+        <div class="flex flex-col" data-message-index={i}>
           {#if msg.tool_calls && msg.tool_calls.length > 0}
             <div class="space-y-2 mb-1">
               {#each getToolCalls(msg) as tc}
@@ -240,11 +452,67 @@
             </div>
           {/if}
           {#if msg.content}
-            <div class="text-gray-100 text-sm whitespace-pre-wrap">{msg.content}</div>
+            {@const rendered = renderMessageWithCards(msg.content as string)}
+            {#if Array.isArray(rendered)}
+              <!-- URL cards -->
+              {#each rendered as item}
+                {#if item.type === "url-card"}
+                  <a
+                    href={item.card.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    class="mt-2 flex items-start gap-3 rounded-lg border border-white/10 bg-[#1a1a2e] p-3 hover:border-blue-500/40 hover:bg-[#1e1e38] transition-colors max-w-[85%]"
+                  >
+                    <svg class="w-4 h-4 text-blue-400 flex-none mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-width="2" d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" stroke-linecap="round" stroke-linejoin="round"/>
+                      <path stroke-width="2" d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    <div class="flex-1 min-w-0">
+                      <div class="text-white text-sm font-medium truncate">{item.card.title}</div>
+                      {#if item.card.description}
+                        <div class="text-gray-400 text-xs mt-1 truncate">{item.card.description}</div>
+                      {/if}
+                      <div class="text-blue-400 text-xs mt-1 truncate">{item.card.url}</div>
+                    </div>
+                  </a>
+                {/if}
+              {/each}
+            {:else if rendered.type === "json-table"}
+              <div class="mt-2 rounded border border-green-500/30 bg-[#0d2017] overflow-hidden max-w-[85%]">
+                <div class="overflow-x-auto">
+                  <table class="w-full text-xs">
+                    <thead>
+                      <tr class="border-b border-white/10">
+                        {#each rendered.headers as header}
+                          <th class="px-3 py-2 text-left text-green-400 font-mono font-semibold whitespace-nowrap">{header}</th>
+                        {/each}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {#each rendered.data as row, ri}
+                        <tr class="border-b border-white/5 {ri % 2 === 0 ? 'bg-white/[0.02]' : ''}">
+                          {#each rendered.headers as header}
+                            <td class="px-3 py-1.5 text-gray-300 font-mono whitespace-nowrap">{String((row as Record<string, unknown>)[header] ?? '')}</td>
+                          {/each}
+                        </tr>
+                      {/each}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            {:else if rendered.type === "text"}
+              <div class="text-gray-100 text-sm whitespace-pre-wrap">
+                {#if showSearch && searchQuery}
+                  {@html highlightMatch(rendered.content, searchQuery)}
+                {:else}
+                  {rendered.content}
+                {/if}
+              </div>
+            {/if}
           {/if}
         </div>
       {:else if msg.role === "tool"}
-        <div class="rounded border border-green-500/30 bg-green-950/20 px-3 py-2 text-xs font-mono text-green-300">
+        <div class="rounded border border-green-500/30 bg-green-950/20 px-3 py-2 text-xs font-mono text-green-300" data-message-index={i}>
           <div class="text-green-400 text-[10px] mb-1">tool result</div>
           <pre class="whitespace-pre-wrap break-all">{msg.content}</pre>
         </div>

@@ -653,29 +653,7 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 			"connected": m.telemetry != nil,
 			"timestamp": time.Now().UnixMilli(),
 		}
-		m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.status", Data: json.RawMessage(mustMarshal(status))})
-
-case "fs.delete":
-		var params struct {
-			Path string `json:"path"`
-		}
-		if err := json.Unmarshal(env.Params, &params); err != nil {
-			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
-			return
-		}
-		cleanPath, err := sanitizePath(params.Path)
-		if err != nil {
-			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
-			return
-		}
-		if err := os.RemoveAll(cleanPath); err != nil {
-			sess.Send(Event{Protocol: "ui", Event: "fs.delete.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
-			return
-		}
-		sess.Send(Event{Protocol: "ui", Event: "fs.delete.success", Data: json.RawMessage(fmt.Sprintf(`{"path":%s}`, mustMarshal(params.Path)))})
-		if m.telemetry != nil {
-			m.telemetry.Write(telemetry.Event{SessionID: sessionID, Type: "fs.delete", Command: params.Path})
-		}
+m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.status", Data: json.RawMessage(mustMarshal(status))})
 
 	case "ui.focus.change":
 		m.handleFocusChange(sess, env.Params, sessionID)
@@ -897,6 +875,147 @@ case "fs.delete":
 			return
 		}
 		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.logs.response", Data: json.RawMessage(fmt.Sprintf(`{"id":%s,"logs":%s}`, mustMarshal(params.ID), mustMarshal(logs)))})
+
+	case "docker.create":
+		var params struct {
+			Image   string   `json:"image"`
+			Name    string   `json:"name,omitempty"`
+			Ports   []string `json:"ports,omitempty"`
+			EnvVars []string `json:"env_vars,omitempty"`
+			Volumes []string `json:"volumes,omitempty"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.Image == "" {
+			return
+		}
+		ctx := context.Background()
+		id, err := m.dockerMgr.CreateContainer(ctx, params.Image, params.Name, params.Ports, params.EnvVars, params.Volumes)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.create.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.create.ok", Data: json.RawMessage(fmt.Sprintf(`{"id":%s}`, mustMarshal(id)))})
+
+	case "docker.images":
+		if m.dockerMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(`{"message":"docker manager not available"}`)})
+			return
+		}
+		ctx := context.Background()
+		images, err := m.dockerMgr.ListImages(ctx)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.images.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.images.ok", Data: json.RawMessage(mustMarshal(map[string]interface{}{"images": images}))})
+
+	case "docker.image.remove":
+		var params struct {
+			ID    string `json:"id"`
+			Force bool   `json:"force,omitempty"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.ID == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.RemoveImage(ctx, params.ID, params.Force); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.image.remove.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.image.remove.ok", Data: json.RawMessage(fmt.Sprintf(`{"id":%s}`, mustMarshal(params.ID)))})
+
+	case "docker.image.pull":
+		var params struct {
+			Image string `json:"image"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.Image == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.PullImage(ctx, params.Image); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.image.pull.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.image.pull.ok", Data: json.RawMessage(fmt.Sprintf(`{"image":%s}`, mustMarshal(params.Image)))})
+
+	case "docker.compose.ls":
+		if m.dockerMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(`{"message":"docker manager not available"}`)})
+			return
+		}
+		ctx := context.Background()
+		projects, err := m.dockerMgr.ListComposeProjects(ctx)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.compose.ls.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.compose.ls.ok", Data: json.RawMessage(mustMarshal(map[string]interface{}{"projects": projects}))})
+
+	case "docker.compose.up":
+		var params struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.Path == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.ComposeUp(ctx, params.Path, true); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.compose.up.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.compose.up.ok", Data: json.RawMessage(fmt.Sprintf(`{"path":%s}`, mustMarshal(params.Path)))})
+
+	case "docker.compose.down":
+		var params struct {
+			Path          string `json:"path"`
+			RemoveVolumes bool   `json:"remove_volumes,omitempty"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.Path == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.ComposeDown(ctx, params.Path, params.RemoveVolumes); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.compose.down.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.compose.down.ok", Data: json.RawMessage(fmt.Sprintf(`{"path":%s}`, mustMarshal(params.Path)))})
+
+	case "docker.compose.stop":
+		var params struct {
+			Path string `json:"path"`
+		}
+		if err := json.Unmarshal(env.Params, &params); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		if m.dockerMgr == nil || params.Path == "" {
+			return
+		}
+		ctx := context.Background()
+		if err := m.dockerMgr.ComposeStop(ctx, params.Path); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "docker.compose.stop.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "docker.compose.stop.ok", Data: json.RawMessage(fmt.Sprintf(`{"path":%s}`, mustMarshal(params.Path)))})
 
 	// ---- Config management ----
 	case "config.get":

@@ -3,6 +3,7 @@ package docker
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os/exec"
 	"strconv"
@@ -244,4 +245,172 @@ func (m *Manager) GetLogs(ctx context.Context, containerID string, tail string) 
 		logs = logs + "\n" + errOut.String()
 	}
 	return logs, nil
+}
+
+// CreateContainer runs a new container from an image.
+func (m *Manager) CreateContainer(ctx context.Context, image, name string, ports, envVars, volumes []string) (string, error) {
+	args := []string{"run", "-d"}
+	if name != "" {
+		args = append(args, "--name", name)
+	}
+	for _, p := range ports {
+		if p != "" {
+			args = append(args, "-p", p)
+		}
+	}
+	for _, e := range envVars {
+		if e != "" {
+			args = append(args, "-e", e)
+		}
+	}
+	for _, v := range volumes {
+		if v != "" {
+			args = append(args, "-v", v)
+		}
+	}
+	args = append(args, image)
+	cmd := exec.CommandContext(ctx, m.cli, args...)
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("failed to create container: %w", err)
+	}
+	return strings.TrimSpace(out.String()), nil
+}
+
+// ImageInfo represents a Docker image.
+type ImageInfo struct {
+	ID       string `json:"id"`
+	Repo     string `json:"repository"`
+	Tag      string `json:"tag"`
+	Size     string `json:"size"`
+	Created  string `json:"created"`
+}
+
+// ListImages returns all Docker images.
+func (m *Manager) ListImages(ctx context.Context) ([]ImageInfo, error) {
+	cmd := exec.CommandContext(ctx, m.cli, "images", "--format", "{{.ID}}\t{{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to list images: %w", err)
+	}
+	var result []ImageInfo
+	lines := strings.Split(strings.TrimSpace(out.String()), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		fields := strings.Split(line, "\t")
+		if len(fields) < 5 {
+			continue
+		}
+		result = append(result, ImageInfo{
+			ID:      fields[0],
+			Repo:    fields[1],
+			Tag:     fields[2],
+			Size:    fields[3],
+			Created: fields[4],
+		})
+	}
+	return result, nil
+}
+
+// RemoveImage removes a Docker image (optionally force).
+func (m *Manager) RemoveImage(ctx context.Context, imageID string, force bool) error {
+	args := []string{"rmi"}
+	if force {
+		args = append(args, "-f")
+	}
+	args = append(args, imageID)
+	cmd := exec.CommandContext(ctx, m.cli, args...)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to remove image %s: %w", imageID, err)
+	}
+	return nil
+}
+
+// PullImage pulls a Docker image from a registry.
+func (m *Manager) PullImage(ctx context.Context, image string) error {
+	cmd := exec.CommandContext(ctx, m.cli, "pull", image)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to pull image %s: %w", image, err)
+	}
+	return nil
+}
+
+// ComposeProject represents a docker compose project.
+type ComposeProject struct {
+	Name      string `json:"name"`
+	Path      string `json:"path"`
+	Services  int    `json:"services"`
+	Status    string `json:"status"`
+}
+
+// ListComposeProjects lists running compose projects.
+func (m *Manager) ListComposeProjects(ctx context.Context) ([]ComposeProject, error) {
+	cmd := exec.CommandContext(ctx, m.cli, "compose", "ls", "--format", "json")
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to list compose projects: %w", err)
+	}
+	var result []ComposeProject
+	data := strings.TrimSpace(out.String())
+	if data == "" {
+		return result, nil
+	}
+	// Try JSON array first
+	if strings.HasPrefix(data, "[") {
+		if err := json.Unmarshal([]byte(data), &result); err == nil {
+			return result, nil
+		}
+	}
+	// Try line-by-line JSON objects (some docker versions output one per line)
+	lines := strings.Split(data, "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		var proj ComposeProject
+		if err := json.Unmarshal([]byte(line), &proj); err == nil {
+			result = append(result, proj)
+		}
+	}
+	return result, nil
+}
+
+// ComposeUp starts a compose project.
+func (m *Manager) ComposeUp(ctx context.Context, projectPath string, detached bool) error {
+	args := []string{"compose", "-f", projectPath, "up", "-d"}
+	if !detached {
+		args = args[:len(args)-1] // remove -d if not detached
+	}
+	cmd := exec.CommandContext(ctx, m.cli, args...)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to compose up: %w", err)
+	}
+	return nil
+}
+
+// ComposeDown stops and removes compose project containers.
+func (m *Manager) ComposeDown(ctx context.Context, projectPath string, removeVolumes bool) error {
+	args := []string{"compose", "-f", projectPath, "down"}
+	if removeVolumes {
+		args = append(args, "-v")
+	}
+	cmd := exec.CommandContext(ctx, m.cli, args...)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to compose down: %w", err)
+	}
+	return nil
+}
+
+// ComposeStop stops compose project containers.
+func (m *Manager) ComposeStop(ctx context.Context, projectPath string) error {
+	cmd := exec.CommandContext(ctx, m.cli, "compose", "-f", projectPath, "stop")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to compose stop: %w", err)
+	}
+	return nil
 }

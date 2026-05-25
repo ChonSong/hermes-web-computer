@@ -10,11 +10,13 @@
   import BottomPanel from "./components/BottomPanel.svelte"
   import MenuBar from "./components/MenuBar.svelte"
   import { workspaceStore, setActiveWorkspace, moveTileToWorkspace, toggleFloating } from "./stores/workspace"
-  import { ws, send, focus, layout, type LayoutTree } from "./stores/ws"
+  import { ws, wsState, send, focus, layout, type LayoutTree } from "./stores/ws"
   import { setContext, getContext } from "svelte"
   import { onMount } from "svelte"
 
   let connected = $derived($ws.connected)
+  let reconnecting = $derived($wsState.reconnecting)
+  let wsRetryCount = $derived($wsState.retryCount)
   let showPalette = $state(false)
   let showKeymap = $state(false)
   let showLeft = $state(true)
@@ -256,8 +258,16 @@
   {/if}
 
   {#if !connected}
+    <!-- Reconnecting banner -->
+    {#if reconnecting}
+      <div class="fixed top-9 left-0 right-0 z-[999] flex items-center justify-center gap-3 px-4 py-2
+        bg-yellow-600/90 backdrop-blur text-yellow-100 text-sm font-medium shadow-lg">
+        <span class="animate-spin">↻</span>
+        Reconnecting{wsRetryCount > 0 ? ` (attempt ${wsRetryCount})…` : '…'}
+      </div>
+    {/if}
     <div class="flex items-center justify-center h-full">
-      <p class="text-gray-500">Disconnected</p>
+      <p class="text-gray-500">{reconnecting ? 'Reconnecting…' : 'Disconnected'}</p>
     </div>
   {:else}
     <div class="h-full grid" style="grid-template-columns: {showLeft ? leftW + 'px' : '0px'} {showLeft ? '4px' : '0px'} 1fr {showRight ? '4px' : '0px'} {showRight ? rightW + 'px' : '0px'};">

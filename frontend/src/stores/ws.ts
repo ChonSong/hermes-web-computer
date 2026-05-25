@@ -1,4 +1,4 @@
-import { writable, type Writable, get } from "svelte/store"
+import { writable, derived, type Writable, get } from "svelte/store"
 import { layoutState } from "./layout.svelte"
 
 export interface Envelope {
@@ -40,10 +40,25 @@ export interface LayoutOp {
   size?: number
 }
 
-export const ws = writable<{ connected: boolean; lastError: string | null }>({
+export interface WsState {
+  connected: boolean
+  reconnecting: boolean
+  lastError: string | null
+  retryCount: number
+}
+
+export const wsState = writable<WsState>({
   connected: false,
+  reconnecting: false,
   lastError: null,
+  retryCount: 0,
 })
+
+// Keep the legacy store shape too (read-only view)
+export const ws = derived(wsState, $s => ({
+  connected: $s.connected,
+  lastError: $s.lastError,
+}))
 
 // Keep the writable store for backward compatibility, but sync to reactive state on every write
 const layoutWritable = writable<{ tree: LayoutTree | null; version: number }>({
@@ -71,6 +86,30 @@ export const focus = writable<string>("root")
 export const ptyOutputs = writable<Map<string, string>>(new Map())
 
 let layoutVersion = 0
+
+// --- Reconnection with exponential backoff ---
+const MAX_BACKOFF_MS = 30_000
+const BASE_BACKOFF_MS = 1_000
+let reconnectTimer: ReturnType<typeof setTimeout> | null = null
+let retryCount = 0
+
+function scheduleReconnect(url: string) {
+  if (reconnectTimer) return
+  retryCount++
+  const delay = Math.min(BASE_BACKOFF_MS * Math.pow(2, retryCount - 1), MAX_BACKOFF_MS)
+  wsState.update(s => ({ ...s, reconnecting: true, retryCount }))
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null
+    connect(url)
+  }, delay)
+}
+
+function cancelReconnect() {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+}
 
 // Apply a single layout operation to the tree
 function applyLayoutOp(tree: LayoutTree, op: {op: string; target_id?: string; direction?: string; content?: string; pty_id?: string; browser_id?: string}): LayoutTree {
@@ -142,7 +181,8 @@ export function connect(url: string = "ws://localhost:3005/ws") {
   socket = new WebSocket(url)
 
   socket.onopen = () => {
-    ws.set({ connected: true, lastError: null })
+    retryCount = 0
+    wsState.set({ connected: true, reconnecting: false, lastError: null, retryCount: 0 })
   }
 
   socket.onmessage = (ev) => {
@@ -187,12 +227,12 @@ export function connect(url: string = "ws://localhost:3005/ws") {
   }
 
   socket.onclose = () => {
-    ws.set({ connected: false, lastError: "Connection closed" })
-    setTimeout(() => connect(url), 2000)
+    wsState.update(s => ({ ...s, connected: false }))
+    scheduleReconnect(url)
   }
 
   socket.onerror = () => {
-    ws.set({ connected: false, lastError: "Connection error" })
+    wsState.update(s => ({ ...s, connected: false, lastError: "Connection error" }))
   }
 }
 

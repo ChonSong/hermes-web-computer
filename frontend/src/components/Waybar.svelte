@@ -6,6 +6,7 @@
   import { onMount } from "svelte"
   import { workspaceStore, setActiveWorkspace } from "../stores/workspace"
   import { on } from "../stores/ws"
+  import { wsState } from "../stores/ws"
 
   const workspaceCount = 9
 
@@ -118,6 +119,11 @@
   // We track this by listening to layout events
   let occupiedWorkspaces = $state<Set<number>>(new Set([1]))
 
+  // --- Connection status ---
+  let wsConnected = $derived($wsState.connected)
+  let wsReconnecting = $derived($wsState.reconnecting)
+  let wsRetryCount = $derived($wsState.retryCount)
+
   onMount(() => {
     const cleanup = on("layout.delta", (data: unknown) => {
       // Re-scan layout tree for occupied workspaces
@@ -192,6 +198,20 @@
     backdrop-blur-xl border border-white/10 rounded-full
     shadow-[0_4px_16px_rgba(0,0,0,0.3)]
     bg-[rgba(18,18,26,0.85)]">
+
+    <!-- Connection status -->
+    {#if wsReconnecting}
+      <span class="text-xs text-yellow-400" title="Reconnecting (attempt {wsRetryCount})">
+        ↻
+      </span>
+    {:else if wsConnected}
+      <span class="text-xs text-green-400" title="Connected">✓</span>
+    {:else}
+      <span class="text-xs text-red-400" title="Disconnected">✗</span>
+    {/if}
+
+    <!-- Separator -->
+    <div class="w-px h-3 bg-white/10 mx-1"></div>
 
     <!-- Wifi -->
     <span class="text-xs {wifiConnected ? 'text-white' : 'text-white/40'}" title="WiFi: {wifiConnected ? 'Connected' : 'Disconnected'}">
