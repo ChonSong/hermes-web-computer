@@ -3,29 +3,27 @@
 // Run: npx playwright test e2e/tests/visual-baseline.spec.ts
 
 import { test, expect } from '@playwright/test';
-import path from 'path';
 import fs from 'fs';
 
 const BASE_DIR = '/tmp/hwc-qa';
 const BASELINES_DIR = `${BASE_DIR}/baselines`;
 const SCREENSHOTS_DIR = `${BASE_DIR}/screenshots`;
 
-// Ensure directories exist
-beforeAll(() => {
-  fs.mkdirSync(BASELINES_DIR, { recursive: true });
-  fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
-});
-
 test.describe('Visual Regression', () => {
+
+  test.beforeAll(() => {
+    fs.mkdirSync(BASELINES_DIR, { recursive: true });
+    fs.mkdirSync(SCREENSHOTS_DIR, { recursive: true });
+  });
 
   test('baseline: default 1440x900 layout', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('http://localhost:3113', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:3005', { waitUntil: 'networkidle' });
     
     // Wait for the app to fully render
     await page.waitForTimeout(2000);
     
-    const screenshot = await page.screenshot({
+    await page.screenshot({
       path: `${SCREENSHOTS_DIR}/baseline-default.png`,
       fullPage: true
     });
@@ -39,10 +37,10 @@ test.describe('Visual Regression', () => {
 
   test('baseline: 1280x720 layout', async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 720 });
-    await page.goto('http://localhost:3113', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:3005', { waitUntil: 'networkidle' });
     await page.waitForTimeout(1500);
     
-    const screenshot = await page.screenshot({
+    await page.screenshot({
       path: `${SCREENSHOTS_DIR}/baseline-1280x720.png`,
       fullPage: true
     });
@@ -52,10 +50,10 @@ test.describe('Visual Regression', () => {
 
   test('baseline: 1920x1080 layout', async ({ page }) => {
     await page.setViewportSize({ width: 1920, height: 1080 });
-    await page.goto('http://localhost:3113', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:3005', { waitUntil: 'networkidle' });
     await page.waitForTimeout(1500);
     
-    const screenshot = await page.screenshot({
+    await page.screenshot({
       path: `${SCREENSHOTS_DIR}/baseline-1920x1080.png`,
       fullPage: true
     });
@@ -65,15 +63,16 @@ test.describe('Visual Regression', () => {
 
   test('regression: pixel diff against baseline', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('http://localhost:3113', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:3005', { waitUntil: 'networkidle' });
     await page.waitForTimeout(2000);
     
-    const screenshot = await page.screenshot({
+    await page.screenshot({
       path: `${SCREENSHOTS_DIR}/current-default.png`,
       fullPage: true
     });
     
     const baselinePath = `${BASELINES_DIR}/baseline-default.png`;
+    const currentPath = `${SCREENSHOTS_DIR}/current-default.png`;
     
     // Check if baseline exists
     if (!fs.existsSync(baselinePath)) {
@@ -81,39 +80,27 @@ test.describe('Visual Regression', () => {
       return;
     }
     
-    // Use pixel comparison via canvas
-    const pixelDiff = await page.evaluate(async (currentPath, baselinePath) => {
-      const fs = require('fs');
-      
-      // Read both images and compare at reduced resolution
-      // For actual pixel diff, you'd use a library like 'pixelmatch'
-      // This is a simplified check
-      const currentStats = fs.statSync(currentPath);
-      const baselineStats = fs.statSync(baselinePath);
-      
-      const sizeDiff = Math.abs(currentStats.size - baselineStats.size);
-      const maxSize = Math.max(currentStats.size, baselineStats.size);
-      const diffPercent = (sizeDiff / maxSize) * 100;
-      
-      return {
-        currentSize: currentStats.size,
-        baselineSize: baselineStats.size,
-        diffPercent: diffPercent.toFixed(2)
-      };
-    }, screenshot.path, baselinePath);
+    // Compare file sizes as a rough proxy for pixel diff
+    const currentStats = fs.statSync(currentPath);
+    const baselineStats = fs.statSync(baselinePath);
     
-    console.log(`Pixel diff: ${pixelDiff.diffPercent}% (size-based estimate)`);
+    const sizeDiff = Math.abs(currentStats.size - baselineStats.size);
+    const maxSize = Math.max(currentStats.size, baselineStats.size);
+    const diffPercent = ((sizeDiff / maxSize) * 100).toFixed(2);
+    
+    console.log(`Pixel diff: ${diffPercent}% (size-based estimate)`);
+    console.log(`Current: ${currentStats.size}b, Baseline: ${baselineStats.size}b`);
     
     // Fail if diff > 5% (indicates meaningful visual change)
     const diffThreshold = 5.0;
-    if (parseFloat(pixelDiff.diffPercent) > diffThreshold) {
-      console.log(`⚠ Visual regression detected: ${pixelDiff.diffPercent}% change`);
+    if (parseFloat(diffPercent) > diffThreshold) {
+      console.log(`⚠ Visual regression detected: ${diffPercent}% change`);
     }
   });
 
   test('layout: three columns visible', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('http://localhost:3113', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:3005', { waitUntil: 'networkidle' });
     
     // Check for key structural elements
     // The app should have a grid layout with left, middle, right panels
@@ -133,7 +120,7 @@ test.describe('Visual Regression', () => {
 
   test('design tokens: glassmorphism applied', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('http://localhost:3113', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:3005', { waitUntil: 'networkidle' });
     
     // Check computed styles for glassmorphism classes
     const hasBackdropBlur = await page.evaluate(() => {
@@ -165,7 +152,7 @@ test.describe('Visual Regression', () => {
     });
     
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('http://localhost:3113', { waitUntil: 'networkidle' });
+    await page.goto('http://localhost:3005', { waitUntil: 'networkidle' });
     await page.waitForTimeout(3000);
     
     // Filter out known acceptable errors (e.g., third-party lib warnings)

@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"math"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -383,6 +385,132 @@ func mustMarshal(v interface{}) []byte {
 	return b
 }
 
+// tokenEstimate approximates token count from text (rough: 1 token ≈ 4 chars).
+func tokenEstimate(text string) int {
+	return (len(text) / 4) + 1
+}
+
+// providerFromModel extracts the provider name from a model string.
+func providerFromModel(model string) string {
+	model = strings.ToLower(model)
+	switch {
+	case strings.Contains(model, "claude"):
+		return "anthropic"
+	case strings.Contains(model, "gpt-4") || strings.Contains(model, "gpt-3.5") || strings.Contains(model, "o1") || strings.Contains(model, "o1-mini"):
+		return "openai"
+	case strings.Contains(model, "gemini"):
+		return "google"
+	case strings.Contains(model, "deepseek"):
+		return "deepseek"
+	case strings.Contains(model, "groq") || strings.Contains(model, "llama"):
+		return "groq"
+	case strings.Contains(model, "ollama"):
+		return "ollama"
+	default:
+		return "unknown"
+	}
+}
+
+// modelFamily extracts a short family name from a model string.
+func modelFamily(model string) string {
+	model = strings.ToLower(model)
+	if strings.Contains(model, "claude-3-5-opus") || strings.Contains(model, "claude-opus") {
+		return "claude-opus"
+	}
+	if strings.Contains(model, "claude-3-5-sonnet") || strings.Contains(model, "claude-sonnet") {
+		return "claude-sonnet"
+	}
+	if strings.Contains(model, "claude-3-5-haiku") || strings.Contains(model, "claude-haiku") {
+		return "claude-haiku"
+	}
+	if strings.Contains(model, "claude-3-opus") {
+		return "claude-3-opus"
+	}
+	if strings.Contains(model, "claude-3-sonnet") {
+		return "claude-3-sonnet"
+	}
+	if strings.Contains(model, "claude-3-haiku") {
+		return "claude-3-haiku"
+	}
+	if strings.Contains(model, "gpt-4o") {
+		return "gpt-4o"
+	}
+	if strings.Contains(model, "gpt-4-turbo") {
+		return "gpt-4-turbo"
+	}
+	if strings.Contains(model, "gpt-4") {
+		return "gpt-4"
+	}
+	if strings.Contains(model, "gpt-3.5-turbo") {
+		return "gpt-3.5-turbo"
+	}
+	if strings.Contains(model, "o1") {
+		return "o1"
+	}
+	if strings.Contains(model, "gemini-2-flash") {
+		return "gemini-2-flash"
+	}
+	if strings.Contains(model, "gemini-1-5-flash") {
+		return "gemini-1.5-flash"
+	}
+	if strings.Contains(model, "gemini-pro") {
+		return "gemini-pro"
+	}
+	if strings.Contains(model, "deepseek") {
+		return "deepseek"
+	}
+	if strings.Contains(model, "llama") {
+		return "llama"
+	}
+	return model
+}
+
+// modelPricing returns estimated cost per 1M tokens for a given model.
+// Prices are approximate for common models (Anthropic, OpenAI, Google, DeepSeek).
+func modelPricing(model string) (input float64, output float64) {
+	model = strings.ToLower(model)
+	switch {
+	case strings.Contains(model, "claude-opus") || strings.Contains(model, "claude-3-5-opus"):
+		return 15.0, 75.0
+	case strings.Contains(model, "claude-sonnet") || strings.Contains(model, "claude-3-5-sonnet"):
+		return 3.0, 15.0
+	case strings.Contains(model, "claude-haiku") || strings.Contains(model, "claude-3-5-haiku"):
+		return 0.8, 4.0
+	case strings.Contains(model, "claude-3-opus"):
+		return 15.0, 75.0
+	case strings.Contains(model, "claude-3-sonnet"):
+		return 3.0, 15.0
+	case strings.Contains(model, "claude-3-haiku"):
+		return 0.25, 1.25
+	case strings.Contains(model, "gpt-4o"):
+		return 5.0, 20.0
+	case strings.Contains(model, "gpt-4-turbo"):
+		return 10.0, 30.0
+	case strings.Contains(model, "gpt-4"):
+		return 30.0, 60.0
+	case strings.Contains(model, "gpt-35-turbo") || strings.Contains(model, "gpt-3.5-turbo"):
+		return 0.5, 1.5
+	case strings.Contains(model, "o1"):
+		return 15.0, 60.0
+	case strings.Contains(model, "o1-mini"):
+		return 3.0, 12.0
+	case strings.Contains(model, "gemini-2-flash"):
+		return 0.1, 0.4
+	case strings.Contains(model, "gemini-1-5-flash"):
+		return 0.075, 0.3
+	case strings.Contains(model, "gemini-pro"):
+		return 1.25, 5.0
+	case strings.Contains(model, "deepseek-chat") || strings.Contains(model, "deepseek-v3"):
+		return 0.14, 0.28
+	case strings.Contains(model, "deepseek-coder"):
+		return 0.14, 0.28
+	case strings.Contains(model, "llama-3-1-70b") || strings.Contains(model, "llama-3-1-8b"):
+		return 0.0, 0.0 // Groq free tier
+	default:
+		return 1.0, 2.0
+	}
+}
+
 func (m *Multiplexer) route(env Envelope, sess *Session, sessionID string) {
 	log.Printf("routing: protocol=%s method=%s id=%s", env.Protocol, env.Method, env.ID)
 
@@ -533,34 +661,121 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 		if params.Days == 0 {
 			params.Days = 7
 		}
-		// Compute real analytics from session store
+		// Compute real analytics from session store + cost ledger (Step 6.2)
 		totals := map[string]interface{}{
 			"total_input":          0,
 			"total_output":         0,
 			"total_sessions":       0,
 			"total_api_calls":      0,
-			"total_estimated_cost": nil,
+			"total_estimated_cost": 0.0,
 		}
 		var daily []interface{}
 		var byModel []interface{}
 		topSkills := []interface{}{}
+
+		// Track per-model stats for cost ledger (Step 6.2)
+		modelStats := make(map[string]map[string]interface{})
 
 		if m.sessionStore != nil {
 			allSessions, err := m.sessionStore.All()
 			if err == nil {
 				totals["total_sessions"] = len(allSessions)
 				var totalInput, totalOutput int
+				// Group sessions by day for daily breakdown
+				dailyMap := make(map[string]map[string]interface{})
+
 				for _, sess := range allSessions {
+					// Daily aggregation
+					day := time.Unix(sess.CreatedAt, 0).Format("2006-01-02")
+					if dailyMap[day] == nil {
+						dailyMap[day] = map[string]interface{}{"day": day, "sessions": 0, "input_tokens": 0, "output_tokens": 0}
+					}
+
 					for _, msg := range sess.Messages {
 						if msg.Role == "user" {
-							totalInput += len(msg.Content)
+							tokens := tokenEstimate(msg.Content)
+							totalInput += tokens
+							inputInt := dailyMap[day]["input_tokens"].(int) + tokens
+							dailyMap[day]["input_tokens"] = inputInt
 						} else if msg.Role == "assistant" {
-							totalOutput += len(msg.Content)
+							tokens := tokenEstimate(msg.Content)
+							totalOutput += tokens
+							outputInt := dailyMap[day]["output_tokens"].(int) + tokens
+							dailyMap[day]["output_tokens"] = outputInt
 						}
 					}
+
+					// Per-model stats
+					model := sess.Model
+					if model == "" {
+						model = "unknown"
+					}
+					if modelStats[model] == nil {
+						modelStats[model] = map[string]interface{}{
+							"model": model, "provider": providerFromModel(model),
+							"sessions": 0, "input_tokens": 0, "output_tokens": 0,
+							"cache_read_tokens": 0, "api_calls": 0, "estimated_cost": 0.0,
+							"last_used_at": int64(0),
+						}
+					}
+					ms := modelStats[model]
+					ms["sessions"] = ms["sessions"].(int) + 1
+					if sess.UpdatedAt > ms["last_used_at"].(int64) {
+						ms["last_used_at"] = sess.UpdatedAt
+					}
+
+					// Count API calls from message structure
+					var msgInput, msgOutput int
+					for _, msg := range sess.Messages {
+						if msg.Role == "user" {
+							msgInput += tokenEstimate(msg.Content)
+						} else if msg.Role == "assistant" {
+							msgOutput += tokenEstimate(msg.Content)
+						}
+					}
+					ms["input_tokens"] = ms["input_tokens"].(int) + msgInput
+					ms["output_tokens"] = ms["output_tokens"].(int) + msgOutput
+
+					dailyMap[day]["sessions"] = dailyMap[day]["sessions"].(int) + 1
 				}
+
+				// Convert dailyMap to sorted slice (newest first)
+				type dayEntry struct{ day string; data map[string]interface{} }
+				var dailyList []dayEntry
+				for day, data := range dailyMap {
+					dailyList = append(dailyList, dayEntry{day, data})
+				}
+				sort.Slice(dailyList, func(i, j int) bool { return dailyList[i].day > dailyList[j].day })
+				for _, de := range dailyList {
+					daily = append(daily, de.data)
+				}
+
 				totals["total_input"] = totalInput
 				totals["total_output"] = totalOutput
+
+				// Compute estimated cost per model (Step 6.2)
+				var totalCost float64
+				for model, ms := range modelStats {
+					inp := ms["input_tokens"].(int)
+					out := ms["output_tokens"].(int)
+					inPrice, outPrice := modelPricing(model)
+					cost := (float64(inp)/1_000_000)*inPrice + (float64(out)/1_000_000)*outPrice
+					ms["estimated_cost"] = math.Round(cost*100) / 100
+					totalCost += cost
+
+					// Detect capabilities from model name
+					capabilities := map[string]interface{}{
+						"supports_tools":      strings.Contains(model, "gpt-4") || strings.Contains(model, "claude") || strings.Contains(model, "gemini"),
+						"supports_vision":    strings.Contains(model, "4o") || strings.Contains(model, "claude-3"),
+						"supports_reasoning":  strings.Contains(model, "o1") || strings.Contains(model, "claude-3-5") || strings.Contains(model, "opus"),
+						"context_window":       128000,
+						"max_output_tokens":   8192,
+						"model_family":        modelFamily(model),
+					}
+					ms["capabilities"] = capabilities
+					byModel = append(byModel, ms)
+				}
+				totals["total_estimated_cost"] = math.Round(totalCost*100) / 100
 			}
 		}
 
@@ -653,7 +868,44 @@ func (m *Multiplexer) routeUI(env Envelope, sess *Session, sessionID string) {
 			"connected": m.telemetry != nil,
 			"timestamp": time.Now().UnixMilli(),
 		}
-m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.status", Data: json.RawMessage(mustMarshal(status))})
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.status", Data: json.RawMessage(mustMarshal(status))})
+
+	case "observability.events":
+		var params struct {
+			Limit int `json:"limit"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if params.Limit == 0 {
+			params.Limit = 100
+		}
+		if params.Limit > 500 {
+			params.Limit = 500
+		}
+		var events []interface{}
+		if m.telemetry != nil {
+			evts, err := m.telemetry.ReadLast(params.Limit)
+			if err == nil {
+				for _, e := range evts {
+					events = append(events, map[string]interface{}{
+						"type":      e.Type,
+						"timestamp": time.UnixMilli(e.Ts).Format(time.RFC3339),
+						"data": map[string]interface{}{
+							"session":  e.SessionID,
+							"user":     e.User,
+							"policy":   e.Policy,
+							"command":  e.Command,
+							"tool":     e.Tool,
+							"path":      e.Path,
+							"outcome":  e.Outcome,
+							"drift_score": e.DriftScore,
+						},
+					})
+				}
+			}
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.events.result", Data: json.RawMessage(mustMarshal(map[string]interface{}{"events": events, "count": len(events)}))})
 
 	case "ui.focus.change":
 		m.handleFocusChange(sess, env.Params, sessionID)

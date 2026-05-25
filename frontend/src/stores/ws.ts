@@ -372,6 +372,10 @@ export function observabilityStatus(): string {
   return send({ protocol: "ui", method: "observability.status" })
 }
 
+export function observabilityEvents(limit = 100): string {
+  return send({ protocol: "ui", method: "observability.events", params: { limit } })
+}
+
 export function fsDelete(path: string): string {
   return send({ protocol: "ui", method: "fs.delete", params: { path } })
 }

@@ -1,17 +1,32 @@
 <script lang="ts">
   /**
-   * DashObservability — Migrated from agent-os ObservabilityPanel.tsx
-   * Real-time event feed with filtering.
+   * DashObservability — Real-time event feed backed by telemetry ring buffer.
+   * Step 6.1: Wire to observability.events WS handler that reads from telemetry.ReadLast().
    */
   import { onMount } from "svelte"
-  import { on, send } from "../stores/ws"
+  import { on, send, observabilityStatus, observabilityEvents } from "../stores/ws"
 
-  type EventType = "tool_call" | "task_complete" | "delegation" | "assumption" | "drift" | "circuit_open"
+  type EventType = "tool_call" | "task_complete" | "delegation" | "assumption" | "drift" | "circuit_open" | "session.connected" | "layout.update" | "interrupt" | "approval.granted" | "pty.write" | "chat.send" | "unknown"
 
   interface AIEEvent {
-    type: EventType
+    type: string
     timestamp: string
     data: Record<string, unknown>
+  }
+
+  interface TelemetryEvent {
+    type: string
+    timestamp: string
+    data: {
+      session?: string
+      user?: string
+      policy?: string
+      command?: string
+      tool?: string
+      path?: string
+      outcome?: string
+      drift_score?: number
+    }
   }
 
   const EVENT_COLORS: Record<string, { text: string; bg: string }> = {
@@ -21,24 +36,32 @@
     assumption: { text: "text-amber-400", bg: "bg-yellow-400/10" },
     drift: { text: "text-red-400", bg: "bg-red-400/10" },
     circuit_open: { text: "text-orange-400", bg: "bg-orange-400/10" },
+    "session.connected": { text: "text-cyan-400", bg: "bg-cyan-400/10" },
+    "layout.update": { text: "text-teal-400", bg: "bg-teal-400/10" },
+    "interrupt": { text: "text-red-400", bg: "bg-red-400/10" },
+    "approval.granted": { text: "text-green-400", bg: "bg-green-400/10" },
+    "pty.write": { text: "text-yellow-400", bg: "bg-yellow-400/10" },
+    "chat.send": { text: "text-indigo-400", bg: "bg-indigo-400/10" },
   }
 
   let events = $state<AIEEvent[]>([])
   let connected = $state(false)
-  let filter = $state<EventType | "all">("all")
+  let filter = $state<string>("all")
 
   function formatEvent(event: AIEEvent): { summary: string; detail: string } {
-    const d = event.data
-    switch (event.type) {
+    const d = event.data ?? {}
+    const t = event.type
+
+    switch (t) {
       case "tool_call":
         return {
-          summary: `🔧 ${d.tool_name ?? "unknown"}`,
-          detail: JSON.stringify(d.tool_args ?? {}, null, 0).slice(0, 120),
+          summary: `🔧 ${d.tool_name ?? d.tool ?? "unknown"}`,
+          detail: String(d.tool_args ?? d.command ?? d.tool ?? "").slice(0, 120),
         }
       case "task_complete":
         return {
           summary: `✅ Done (iter ${d.iteration ?? "?"})`,
-          detail: String(d.final_content ?? "").slice(0, 150),
+          detail: String(d.final_content ?? d.outcome ?? "").slice(0, 150),
         }
       case "delegation":
         return {
@@ -60,16 +83,49 @@
           summary: `🔌 Circuit Open`,
           detail: JSON.stringify(d, null, 0).slice(0, 120),
         }
+      case "session.connected":
+        return {
+          summary: `🟢 Session connected`,
+          detail: `session: ${d.session ?? "?"}`,
+        }
+      case "layout.update":
+        return {
+          summary: `📐 Layout ${d.command ?? "update"}`,
+          detail: `session: ${d.session ?? "?"}`,
+        }
+      case "interrupt":
+        return {
+          summary: `⏹ Interrupt`,
+          detail: `session: ${d.session ?? "?"}`,
+        }
+      case "approval.granted":
+        return {
+          summary: `🔓 Approval granted`,
+          detail: `token: ${String(d.token ?? d.command ?? "").slice(0, 60)}`,
+        }
+      case "pty.write":
+        return {
+          summary: `⌨️ PTY write`,
+          detail: String(d.command ?? "").slice(0, 80),
+        }
+      case "chat.send":
+        return {
+          summary: `💬 Chat send`,
+          detail: String(d.command ?? "").slice(0, 80),
+        }
       default:
         return {
-          summary: event.type,
+          summary: t.replace(/[._]/g, " "),
           detail: JSON.stringify(d, null, 0).slice(0, 120),
         }
     }
   }
 
   const filtered = $derived(
-    filter === "all" ? events : events.filter(e => e.type === filter)
+    filter === "all" ? events : events.filter(e => {
+      if (filter === "ai_events") return ["tool_call","task_complete","delegation","assumption","drift","circuit_open"].includes(e.type)
+      return e.type === filter
+    })
   )
 
   const typeCounts = $derived.by(() => {
@@ -80,26 +136,61 @@
     return acc
   })
 
+  const FILTER_OPTIONS = [
+    { value: "all", label: "All" },
+    { value: "ai_events", label: "AI" },
+    { value: "session.connected", label: "Session" },
+    { value: "layout.update", label: "Layout" },
+    { value: "interrupt", label: "Interrupt" },
+    { value: "approval.granted", label: "Approval" },
+    { value: "pty.write", label: "PTY" },
+    { value: "chat.send", label: "Chat" },
+  ] as const
+
   onMount(() => {
-    // Listen for observability events from WS
-    const unsub = on("observability.event", (data: any) => {
+    // Listen for live events from WS
+    const unsub1 = on("observability.event", (data: unknown) => {
       if (data) {
-        events = [data, ...events].slice(0, 200)
+        const evt = data as AIEEvent
+        events = [evt, ...events].slice(0, 200)
         connected = true
       }
     })
 
-    // Request connection status
-    send({ protocol: "ui", method: "observability.status" })
-
-    // Also listen for status updates
-    const unsub2 = on("observability.status", (data: any) => {
-      connected = data?.connected ?? false
+    // Listen for bulk events result (Step 6.1 — main telemetry feed)
+    const unsub2 = on("observability.events.result", (data: unknown) => {
+      const d = data as { events?: TelemetryEvent[]; count?: number }
+      if (d?.events) {
+        // Convert telemetry events to AIEEvent format
+        const telemetryEvents: AIEEvent[] = d.events.map(e => ({
+          type: e.type,
+          timestamp: e.timestamp,
+          data: e.data as Record<string, unknown>,
+        }))
+        // Merge with existing (avoid dupes by type+timestamp)
+        const existing = new Set(events.map(ev => `${ev.type}:${ev.timestamp}`))
+        const newEvents = telemetryEvents.filter(e => !existing.has(`${e.type}:${e.timestamp}`))
+        if (newEvents.length > 0) {
+          events = [...newEvents, ...events].slice(0, 200)
+        }
+        connected = true
+      }
     })
 
+    // Listen for status updates
+    const unsub3 = on("observability.status", (data: unknown) => {
+      const d = data as { connected?: boolean }
+      connected = d?.connected ?? false
+    })
+
+    // Request initial state — status and recent telemetry events (Step 6.1)
+    observabilityStatus()
+    observabilityEvents(200)
+
     return () => {
-      unsub()
+      unsub1()
       unsub2()
+      unsub3()
     }
   })
 </script>
@@ -119,19 +210,19 @@
       <span class="text-[10px] text-gray-500">{events.length} events</span>
     </div>
     
-    <div class="flex gap-0.5">
-      {#each ["all", "tool_call", "task_complete", "delegation"] as t}
+    <div class="flex gap-0.5 flex-wrap">
+      {#each FILTER_OPTIONS as opt}
         <button
-          onclick={() => filter = t as any}
+          onclick={() => filter = opt.value}
           class="text-[10px] px-2 py-0.5 rounded-full transition-colors {
-            filter === t
+            filter === opt.value
               ? 'bg-gray-800 text-gray-200'
               : 'text-gray-500 hover:text-gray-300'
           }"
         >
-          {t === "all" ? "All" : t.replace("_", " ")}
-          {#if t !== "all" && typeCounts[t] != null}
-            <span class="ml-0.5 opacity-60">({typeCounts[t]})</span>
+          {opt.label}
+          {#if opt.value !== "all" && opt.value !== "ai_events" && typeCounts[opt.value] != null}
+            <span class="ml-0.5 opacity-60">({typeCounts[opt.value]})</span>
           {/if}
         </button>
       {/each}
@@ -142,7 +233,7 @@
   <div class="flex-1 overflow-y-auto p-3 space-y-1.5">
     {#if filtered.length === 0}
       <p class="text-xs text-gray-500 text-center py-10">
-        {connected ? "Waiting for events..." : "No events (disconnected)"}
+        {connected ? "Waiting for events..." : "No events (telemetry may be empty)"}
       </p>
     {:else}
       {#each filtered as event, i}
@@ -153,10 +244,13 @@
         >
           <div class="flex items-start justify-between gap-1.5 mb-1">
             <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium {color.bg} {color.text}">
-              {event.type.replace("_", " ")}
+              {event.type.replace(/[._]/g, " ")}
             </span>
             <span class="text-gray-500 ml-auto whitespace-nowrap text-[9px]">
-              {new Date(event.timestamp).toLocaleTimeString("en-AU", { hour12: false })}
+              {(() => {
+                try { return new Date(event.timestamp).toLocaleTimeString("en-AU", { hour12: false }) }
+                catch { return event.timestamp }
+              })()}
             </span>
           </div>
           <div class="font-medium mb-0.5 {color.text}">{summary}</div>
