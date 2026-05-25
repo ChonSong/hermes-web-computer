@@ -1152,6 +1152,100 @@ m.sendEvent(sess, Event{Protocol: "ui", Event: "observability.status", Data: jso
 			return
 		}
 		m.sendEvent(sess, Event{Protocol: "ui", Event: "system.restart.ok", Data: json.RawMessage(`{"message":"restart signal sent"}`)})
+
+	// ---- Xpra management ----
+	case "xpra.start":
+		var params struct {
+			Display string `json:"display"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if m.xpraMgr == nil {
+			// Auto-initialize with display 10
+			m.mu.Lock()
+			if m.xpraMgr == nil {
+				m.xpraMgr = xpra.New("default", 10)
+			}
+			m.mu.Unlock()
+		}
+		if params.Display == "" {
+			params.Display = ":10"
+		}
+		if err := m.xpraMgr.StartServer(params.Display); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.start.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		info := m.xpraMgr.Info()
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "xpra.start.ok", Data: json.RawMessage(mustMarshal(info))})
+
+	case "xpra.stop":
+		if m.xpraMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.stop.error", Data: json.RawMessage(`{"message":"xpra not initialized"}`)})
+			return
+		}
+		if err := m.xpraMgr.StopServer(); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.stop.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "xpra.stop.ok", Data: json.RawMessage(`{"message":"stopped"}`)})
+
+	case "xpra.attach":
+		var params struct {
+			Cmd  string   `json:"cmd"`
+			Args []string `json:"args"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if m.xpraMgr == nil || !m.xpraMgr.IsRunning() {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.attach.error", Data: json.RawMessage(`{"message":"xpra server not running"}`)})
+			return
+		}
+		if params.Cmd == "" {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.attach.error", Data: json.RawMessage(`{"message":"cmd is required"}`)})
+			return
+		}
+		ctx := context.Background()
+		windowID, err := m.xpraMgr.AttachApp(ctx, params.Cmd, params.Args)
+		if err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.attach.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "xpra.attach.ok", Data: json.RawMessage(mustMarshal(map[string]interface{}{"window_id": windowID}))})
+
+	case "xpra.list":
+		if m.xpraMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.list", Data: json.RawMessage(`{"windows":[]}`)})
+			return
+		}
+		windows := m.xpraMgr.ListWindows()
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "xpra.list", Data: json.RawMessage(mustMarshal(map[string]interface{}{"windows": windows}))})
+
+	case "xpra.detach":
+		var params struct {
+			WindowID string `json:"window_id"`
+		}
+		if env.Params != nil {
+			json.Unmarshal(env.Params, &params)
+		}
+		if m.xpraMgr == nil || params.WindowID == "" {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.detach.error", Data: json.RawMessage(`{"message":"invalid request"}`)})
+			return
+		}
+		if err := m.xpraMgr.DetachWindow(params.WindowID); err != nil {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.detach.error", Data: json.RawMessage(fmt.Sprintf(`{"message":"%s"}`, err.Error()))})
+			return
+		}
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "xpra.detach.ok", Data: json.RawMessage(mustMarshal(map[string]interface{}{"window_id": params.WindowID}))})
+
+	case "xpra.info":
+		if m.xpraMgr == nil {
+			sess.Send(Event{Protocol: "ui", Event: "xpra.info", Data: json.RawMessage(`{"display":"","http_url":"","running":false,"num_windows":0}`)})
+			return
+		}
+		info := m.xpraMgr.Info()
+		m.sendEvent(sess, Event{Protocol: "ui", Event: "xpra.info", Data: json.RawMessage(mustMarshal(info))})
 	}
 }
 

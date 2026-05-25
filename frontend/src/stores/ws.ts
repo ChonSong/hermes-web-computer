@@ -526,4 +526,30 @@ export function mcpPromptsGet(serverName: string, name: string, promptArgs?: Rec
   return send({ protocol: "agent", method: "mcp.prompts.get", params: { server_name: serverName, name, arguments: promptArgs ?? {} } })
 }
 
+// ---- Xpra helpers ----
+
+export function xpraStart(display?: string): string {
+  return send({ protocol: "ui", method: "xpra.start", params: { display: display ?? ":10" } })
+}
+
+export function xpraStop(): string {
+  return send({ protocol: "ui", method: "xpra.stop" })
+}
+
+export function xpraAttach(cmd: string, args?: string[]): string {
+  return send({ protocol: "ui", method: "xpra.attach", params: { cmd, args: args ?? [] } })
+}
+
+export function xpraList(): string {
+  return send({ protocol: "ui", method: "xpra.list" })
+}
+
+export function xpraDetach(windowId: string): string {
+  return send({ protocol: "ui", method: "xpra.detach", params: { window_id: windowId } })
+}
+
+export function xpraInfo(): string {
+  return send({ protocol: "ui", method: "xpra.info" })
+}
+
 // Don't auto-connect - let main.ts call connect()
