@@ -20,7 +20,7 @@ test.describe('File Edit Workflow', () => {
 
     // Step 3: Create a test file via terminal first (more reliable than UI navigation for deep paths)
     // Focus the terminal tile in the middle panel
-    const terminalTile = page.locator('div.border-blue-500').first()
+    const terminalTile = page.locator('div.rounded-2xl').first()
     await terminalTile.click()
 
     // Use pty.write to create the test file

@@ -9,8 +9,8 @@ test('three-column layout renders', async ({ page }) => {
   await expect(page.getByText('📁 Files')).toBeVisible()
   await expect(page.getByText('🚀 Apps')).toBeVisible()
 
-  // Middle panel renders a terminal tile (border-blue-500)
-  await expect(page.locator('div.border-blue-500').first()).toBeVisible({ timeout: 10000 })
+  // Middle panel renders a terminal tile (rounded-2xl, solid dark theme)
+  await expect(page.locator('div.rounded-2xl').first()).toBeVisible({ timeout: 10000 })
 
   // Right panel with agent chat
   await expect(page.getByRole('heading', { name: 'Agent' })).toBeVisible()

@@ -10,7 +10,7 @@ test.describe('Multi-Terminal Pipeline Workflow', () => {
 
   test('launch Terminal 1, run mkdir and echo commands', async ({ page }) => {
     // The initial terminal (root tile) is already present
-    const terminal1 = page.locator('div.border-blue-500').first()
+    const terminal1 = page.locator('div.rounded-2xl').first()
     await expect(terminal1).toBeVisible({ timeout: 10_000 })
 
     // Click to focus Terminal 1
@@ -51,7 +51,7 @@ test.describe('Multi-Terminal Pipeline Workflow', () => {
 
   test('launch Terminal 2 (split), verify layout changes', async ({ page }) => {
     // Wait for initial terminal
-    const terminal1 = page.locator('div.border-blue-500').first()
+    const terminal1 = page.locator('div.rounded-2xl').first()
     await expect(terminal1).toBeVisible({ timeout: 10_000 })
 
     // Focus Terminal 1 and double-click to split (creates Terminal 2)
@@ -60,7 +60,7 @@ test.describe('Multi-Terminal Pipeline Workflow', () => {
     await page.waitForTimeout(1500)
 
     // Verify we now have 2 terminal tiles
-    const tiles = page.locator('div.border-blue-500')
+    const tiles = page.locator('div.rounded-2xl')
     await expect(tiles).toHaveCount(2, { timeout: 5_000 })
 
     // Focus Terminal 2 (the right/bottom one) and run a command
@@ -76,7 +76,7 @@ test.describe('Multi-Terminal Pipeline Workflow', () => {
 
   test('launch Terminal 3 (2x2 grid), then close one and verify reflow', async ({ page }) => {
     // Wait for initial terminal
-    const rootTile = page.locator('div.border-blue-500').first()
+    const rootTile = page.locator('div.rounded-2xl').first()
     await expect(rootTile).toBeVisible({ timeout: 10_000 })
 
     // Split 1: Double-click root to create second terminal (horizontal split)
@@ -85,7 +85,7 @@ test.describe('Multi-Terminal Pipeline Workflow', () => {
     await page.waitForTimeout(1500)
 
     // Split 2: Focus the new terminal and split vertically
-    const tiles2 = page.locator('div.border-blue-500')
+    const tiles2 = page.locator('div.rounded-2xl')
     await expect(tiles2).toHaveCount(2, { timeout: 5_000 })
 
     // Focus the second tile and split it
@@ -95,7 +95,7 @@ test.describe('Multi-Terminal Pipeline Workflow', () => {
     await page.waitForTimeout(1500)
 
     // Now we should have 3 tiles
-    const tiles3 = page.locator('div.border-blue-500')
+    const tiles3 = page.locator('div.rounded-2xl')
     await expect(tiles3).toHaveCount(3, { timeout: 5_000 })
 
     // Run a command in each terminal to verify they work
@@ -125,13 +125,13 @@ test.describe('Multi-Terminal Pipeline Workflow', () => {
     await page.waitForTimeout(1500)
 
     // Verify reflow: should now have 2 tiles
-    const tilesAfter = page.locator('div.border-blue-500')
+    const tilesAfter = page.locator('div.rounded-2xl')
     await expect(tilesAfter).toHaveCount(2, { timeout: 5_000 })
   })
 
   test('verify output visibility across split terminals', async ({ page }) => {
     // Wait for initial terminal
-    const terminal1 = page.locator('div.border-blue-500').first()
+    const terminal1 = page.locator('div.rounded-2xl').first()
     await expect(terminal1).toBeVisible({ timeout: 10_000 })
 
     // Run a command that produces visible output
@@ -145,7 +145,7 @@ test.describe('Multi-Terminal Pipeline Workflow', () => {
     await page.waitForTimeout(1500)
 
     // Verify 2 terminals exist
-    const tiles = page.locator('div.border-blue-500')
+    const tiles = page.locator('div.rounded-2xl')
     await expect(tiles).toHaveCount(2, { timeout: 5_000 })
 
     // Terminal 2 should show the initial xterm welcome text
