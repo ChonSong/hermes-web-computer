@@ -143,7 +143,11 @@ func NewMultiplexer() *Multiplexer {
 	}
 	// Load security config (use defaults if file not found)
 	homeDir, _ := os.UserHomeDir()
-	if err := m.enforcer.LoadConfig(homeDir + "/.agent-os/security.yaml"); err != nil {
+	securityConfigPath := os.Getenv("HWC_SECURITY_CONFIG")
+	if securityConfigPath == "" {
+		securityConfigPath = filepath.Join(homeDir, ".hermes", "hermes-web-computer", "security.yaml")
+	}
+	if err := m.enforcer.LoadConfig(securityConfigPath); err != nil {
 		m.enforcer.UseDefaults()
 	}
 	// Init telemetry
@@ -154,9 +158,9 @@ func NewMultiplexer() *Multiplexer {
 	}
 	// Init session store
 	homeDir, _ = os.UserHomeDir()
-	storePath := os.Getenv("AGENT_OS_STATE_DIR")
+	storePath := os.Getenv("HWC_STATE_DIR")
 	if storePath == "" {
-		storePath = filepath.Join(homeDir, ".agent-os")
+		storePath = filepath.Join(homeDir, ".hermes", "hermes-web-computer")
 	}
 	store, err := session.NewStore(storePath)
 	if err != nil {
