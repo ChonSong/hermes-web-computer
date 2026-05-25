@@ -5,11 +5,17 @@
    */
   import { tick } from "svelte"
   import { sessionStore } from "../stores/sessions.svelte"
+  import { commandStore, parseCommand } from "../stores/commands.svelte"
   import type { SessionMessage } from "../stores/sessions.svelte"
 
   let messagesEl: HTMLDivElement
   let inputValue = $state("")
   let errorMsg = $state<string | null>(null)
+
+  // Autocomplete state
+  let showAutocomplete = $state(false)
+  let selectedIndex = $state(0)
+  let inputEl: HTMLTextAreaElement | null = $state(null)
 
   // Active session
   let activeId = $derived(sessionStore.activeId)
@@ -62,9 +68,54 @@
   }
 
   function handleKeydown(e: KeyboardEvent) {
+    // Arrow navigation for autocomplete
+    if (showAutocomplete && commandStore.filtered.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault()
+        commandStore.selectNext()
+        return
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault()
+        commandStore.selectPrev()
+        return
+      }
+      if (e.key === "Escape") {
+        e.preventDefault()
+        commandStore.dismiss()
+        showAutocomplete = false
+        return
+      }
+    }
+
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
+
+      // If autocomplete is open, execute selected command
+      if (showAutocomplete && commandStore.filtered.length > 0) {
+        const cmd = commandStore.filtered[selectedIndex]
+        if (cmd) {
+          const parsed = parseCommand("/" + cmd.name)
+          commandStore.execute(cmd.name, parsed.args)
+          inputValue = ""
+          showAutocomplete = false
+          return
+        }
+      }
+
       handleSend()
+    }
+  }
+
+  // Detect / prefix for autocomplete
+  function handleInput() {
+    const val = inputValue
+    if (val.startsWith("/")) {
+      commandStore.autocomplete(val)
+      showAutocomplete = true
+    } else {
+      commandStore.dismiss()
+      showAutocomplete = false
     }
   }
 
@@ -144,7 +195,9 @@
     <div class="flex gap-2">
       <textarea
         bind:value={inputValue}
+        bind:this={inputEl}
         onkeydown={handleKeydown}
+        oninput={handleInput}
         placeholder="Message… (Enter to send, Shift+Enter for newline)"
         rows="1"
         class="flex-1 resize-none rounded bg-gray-800 border border-white/20 px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500"
@@ -158,4 +211,25 @@
       </button>
     </div>
   </div>
+
+  <!-- Autocomplete dropdown -->
+  {#if showAutocomplete && commandStore.filtered.length > 0}
+    <div class="flex-none border-t border-white/10 bg-gray-900 max-h-64 overflow-y-auto">
+      {#each commandStore.filtered as cmd, i}
+        <button
+          type="button"
+          onclick={() => {
+            const parsed = parseCommand("/" + cmd.name)
+            commandStore.execute(cmd.name, parsed.args)
+            inputValue = ""
+            showAutocomplete = false
+          }}
+          class="w-full text-left px-4 py-2 text-sm hover:bg-gray-700 flex items-center gap-2 {i === selectedIndex ? 'bg-gray-700 text-white' : 'text-gray-300'}"
+        >
+          <span class="text-blue-400 font-mono">/{cmd.name}</span>
+          <span class="text-gray-500 text-xs">{cmd.description}</span>
+        </button>
+      {/each}
+    </div>
+  {/if}
 </div>
