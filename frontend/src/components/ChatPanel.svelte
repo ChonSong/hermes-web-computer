@@ -26,6 +26,31 @@
   let activeId = $derived(sessionStore.activeId)
   let activeSession = $derived(sessionStore.activeSession)
 
+  // Context meter — token estimation from message content lengths
+  const CONTEXT_WINDOW = 200_000
+
+  let charCount = $derived.by(() => {
+    return (activeSession?.messages ?? []).reduce((sum, msg) => {
+      const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content)
+      return sum + content.length
+    }, 0)
+  })
+
+  let tokenEstimate = $derived(Math.floor(charCount / 4))
+  let tokenPercent = $derived(Math.min((tokenEstimate / CONTEXT_WINDOW) * 100, 100))
+  let tokenPercentDisplay = $derived(tokenPercent.toFixed(1))
+
+  function contextColor(pct: number): string {
+    if (pct >= 85) return "#ef4444"
+    if (pct >= 60) return "#eab308"
+    return "#22c55e"
+  }
+
+  function formatTokens(t: number): string {
+    if (t >= 1000) return (t / 1000).toFixed(1) + "K"
+    return String(t)
+  }
+
   // Full message list (persisted messages + current streaming buffer)
   let allMessages = $derived.by(() => {
     const msgs = [...(activeSession?.messages ?? [])]
@@ -165,8 +190,25 @@
 
   <!-- Header -->
   <div class="flex-none px-4 py-3 border-b border-white/10">
-    <div class="text-xs text-gray-400">
-      {activeSession?.title ?? "New Chat"} &middot; {activeSession?.model ?? "agent"}
+    <div class="flex items-center justify-between gap-3">
+      <div class="text-xs text-gray-400">
+        {activeSession?.title ?? "New Chat"} &middot; {activeSession?.model ?? "agent"}
+      </div>
+      <!-- Context meter -->
+      <div
+        class="flex items-center gap-2 px-2 py-1 rounded text-xs font-mono"
+        style="border: 1px solid {contextColor(tokenPercent)}40; background: #191919;"
+        title={tokenPercent >= 85 ? "Context usage >85%. Consider compressing or starting a new session." : `Context: ${tokenPercentDisplay}% used`}
+      >
+        <span class="text-gray-400">{formatTokens(tokenEstimate)}</span>
+        <div class="w-24 h-2 rounded bg-gray-800 overflow-hidden">
+          <div
+            class="h-full rounded transition-all duration-300"
+            style="width: {tokenPercent}%; background-color: {contextColor(tokenPercent)};"
+          ></div>
+        </div>
+        <span class="text-gray-500">{CONTEXT_WINDOW / 1000}K</span>
+      </div>
     </div>
   </div>
 
