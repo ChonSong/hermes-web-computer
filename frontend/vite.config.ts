@@ -7,8 +7,12 @@ export default defineConfig({
   server: {
     proxy: {
       "/ws": {
-        target: "ws://localhost:3113",
+        target: "ws://localhost:3005",
         ws: true,
+      },
+      "/api": {
+        target: "http://localhost:3005",
+        changeOrigin: true,
       },
       "/v1/models": {
         target: "http://localhost:8642",

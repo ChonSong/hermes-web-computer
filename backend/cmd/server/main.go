@@ -6,17 +6,21 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
 	"hermes-web-computer/backend/audio"
+	"hermes-web-computer/backend/config"
+	"hermes-web-computer/backend/docker"
+	"hermes-web-computer/backend/session"
 	"hermes-web-computer/backend/ws"
 )
 
 func main() {
 	port := os.Getenv("PORT")
 	if port == "" {
-		port = "3113"
+		port = "3005"
 	}
 
 	audioURL := os.Getenv("FUN_AUDIO_WS")
@@ -25,6 +29,35 @@ func main() {
 	}
 
 	mux := ws.NewMultiplexer()
+
+	// Docker manager — enables container lifecycle UI
+	dockerMgr, err := docker.NewManager()
+	if err != nil {
+		log.Printf("docker manager init failed: %v (continuing without docker)", err)
+	} else {
+		mux.SetDockerManager(dockerMgr)
+		log.Println("docker manager attached")
+	}
+
+	// Session store — ~/.hermes/hermes-web-computer/sessions/
+	homeDir, _ := os.UserHomeDir()
+	stateDir := os.Getenv("HWC_STATE_DIR")
+	if stateDir == "" {
+		stateDir = filepath.Join(homeDir, ".hermes", "hermes-web-computer")
+	}
+	store, err := session.NewStore(stateDir)
+	if err != nil {
+		log.Printf("session store init failed: %v (continuing without sessions)", err)
+	} else {
+		mux.SetSessionStore(store)
+		log.Printf("session store initialized at %s", stateDir)
+	}
+
+	// Config manager
+	configMgr := config.NewManager(filepath.Join(stateDir, "config.yaml"))
+	mux.SetConfigManager(configMgr)
+	log.Printf("config manager initialized at %s", stateDir)
+
 	mux.SetAudioBridge(audio.NewBridge(audioURL))
 
 	// Initialize Xpra manager on a fixed display
@@ -55,7 +88,7 @@ func main() {
 		server.Shutdown(shutdownCtx)
 	}()
 
-	log.Printf("agent-os backend starting on :%s", port)
+	log.Printf("hermes-web-computer backend starting on :%s", port)
 	if err := server.ListenAndServe(); err != http.ErrServerClosed {
 		log.Fatalf("server error: %v", err)
 	}
