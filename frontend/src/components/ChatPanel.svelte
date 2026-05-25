@@ -7,10 +7,15 @@
   import { sessionStore } from "../stores/sessions.svelte"
   import { commandStore, parseCommand } from "../stores/commands.svelte"
   import type { SessionMessage } from "../stores/sessions.svelte"
+  import FileUpload from "./FileUpload.svelte"
 
   let messagesEl: HTMLDivElement
   let inputValue = $state("")
   let errorMsg = $state<string | null>(null)
+
+  // File upload state
+  let fileUpload: ReturnType<typeof FileUpload> | null = $state(null)
+  let uploadedFiles = $state<Array<{ path: string; name: string }>>([])
 
   // Autocomplete state
   let showAutocomplete = $state(false)
@@ -133,9 +138,31 @@
   function formatTime(ts: number): string {
     return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
   }
+
+  function handleUploadComplete(path: string, name: string) {
+    uploadedFiles = [...uploadedFiles, { path, name }]
+  }
+
+  function handleUploadRemove(id: string) {
+    uploadedFiles = uploadedFiles.filter((_, i) => i !== Number(id.split("_")[1]))
+  }
 </script>
 
-<div class="flex flex-col h-full bg-gray-900 text-gray-100 text-sm">
+<div
+  class="flex flex-col h-full bg-gray-900 text-gray-100 text-sm relative"
+  ondragover={(e) => fileUpload?.handleDragOver(e)}
+  ondragleave={(e) => fileUpload?.handleDragLeave(e)}
+  ondrop={(e) => fileUpload?.handleDrop(e)}
+  role="application"
+  aria-label="Chat panel with file drop support"
+>
+  <!-- Drop zone overlay -->
+  <FileUpload
+    bind:this={fileUpload}
+    onUploadComplete={handleUploadComplete}
+    onUploadRemove={handleUploadRemove}
+  />
+
   <!-- Header -->
   <div class="flex-none px-4 py-3 border-b border-white/10">
     <div class="text-xs text-gray-400">
@@ -192,6 +219,28 @@
 
   <!-- Input -->
   <div class="flex-none border-t border-white/10 p-3">
+    <!-- Uploaded file chips -->
+    {#if uploadedFiles.length > 0}
+      <div class="flex flex-wrap gap-2 mb-2">
+        {#each uploadedFiles as file, i}
+          <div class="flex items-center gap-1.5 px-2 py-1 rounded-full bg-gray-800 border border-white/10 text-xs">
+            <span class="text-gray-300 truncate max-w-[100px]">{file.name}</span>
+            <span class="text-gray-500 text-[10px]">📎</span>
+            <button
+              type="button"
+              onclick={() => {
+                uploadedFiles = uploadedFiles.filter((_, idx) => idx !== i)
+              }}
+              class="text-gray-500 hover:text-gray-300 transition-colors"
+              aria-label="Remove {file.name}"
+            >
+              ✕
+            </button>
+          </div>
+        {/each}
+      </div>
+    {/if}
+
     <div class="flex gap-2">
       <textarea
         bind:value={inputValue}
