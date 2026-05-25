@@ -90,21 +90,17 @@ let layoutVersion = 0
 // --- Reconnection with exponential backoff ---
 const MAX_BACKOFF_MS = 30_000
 const BASE_BACKOFF_MS = 1_000
+const MAX_RETRY = 10
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null
 let retryCount = 0
 
-function scheduleReconnect(url: string) {
-  if (reconnectTimer) return
-  retryCount++
-  const delay = Math.min(BASE_BACKOFF_MS * Math.pow(2, retryCount - 1), MAX_BACKOFF_MS)
-  wsState.update(s => ({ ...s, reconnecting: true, retryCount }))
-  reconnectTimer = setTimeout(() => {
-    reconnectTimer = null
-    connect(url)
-  }, delay)
+export function forceReconnect(url: string) {
+  cancelReconnect()
+  retryCount = 0
+  connect(url)
 }
 
-function cancelReconnect() {
+export function cancelReconnect() {
   if (reconnectTimer) {
     clearTimeout(reconnectTimer)
     reconnectTimer = null
@@ -183,6 +179,8 @@ export function connect(url: string = "ws://localhost:3005/ws") {
   socket.onopen = () => {
     retryCount = 0
     wsState.set({ connected: true, reconnecting: false, lastError: null, retryCount: 0 })
+    // Re-subscribe to session state after reconnect
+    send({ protocol: "ui", method: "layout.subscribe", params: {} })
   }
 
   socket.onmessage = (ev) => {
@@ -228,7 +226,18 @@ export function connect(url: string = "ws://localhost:3005/ws") {
 
   socket.onclose = () => {
     wsState.update(s => ({ ...s, connected: false }))
-    scheduleReconnect(url)
+    // Schedule reconnect with exponential backoff
+    retryCount++
+    if (retryCount > MAX_RETRY) {
+      wsState.update(s => ({ ...s, reconnecting: false, lastError: "Disconnected after multiple attempts" }))
+      return
+    }
+    const delay = Math.min(BASE_BACKOFF_MS * Math.pow(2, retryCount - 1), MAX_BACKOFF_MS)
+    wsState.update(s => ({ ...s, reconnecting: true, retryCount }))
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+      connect(url)
+    }, delay)
   }
 
   socket.onerror = () => {

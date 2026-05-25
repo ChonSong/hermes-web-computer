@@ -10,13 +10,14 @@
   import BottomPanel from "./components/BottomPanel.svelte"
   import MenuBar from "./components/MenuBar.svelte"
   import { workspaceStore, setActiveWorkspace, moveTileToWorkspace, toggleFloating } from "./stores/workspace"
-  import { ws, wsState, send, focus, layout, type LayoutTree } from "./stores/ws"
+  import { ws, wsState, send, focus, layout, forceReconnect, type LayoutTree } from "./stores/ws"
   import { setContext, getContext } from "svelte"
   import { onMount } from "svelte"
 
   let connected = $derived($ws.connected)
   let reconnecting = $derived($wsState.reconnecting)
   let wsRetryCount = $derived($wsState.retryCount)
+  let wsLastError = $derived($wsState.lastError)
   let showPalette = $state(false)
   let showKeymap = $state(false)
   let showLeft = $state(true)
@@ -257,18 +258,32 @@
     </div>
   {/if}
 
-  {#if !connected}
-    <!-- Reconnecting banner -->
-    {#if reconnecting}
-      <div class="fixed top-9 left-0 right-0 z-[999] flex items-center justify-center gap-3 px-4 py-2
-        bg-yellow-600/90 backdrop-blur text-yellow-100 text-sm font-medium shadow-lg">
-        <span class="animate-spin">↻</span>
-        Reconnecting{wsRetryCount > 0 ? ` (attempt ${wsRetryCount})…` : '…'}
-      </div>
+  <div class="fixed top-0 left-0 right-0 z-[9999] flex items-center justify-center gap-2 px-4 py-1.5 text-xs font-medium transition-all duration-300"
+    style={connected ? "background:#16a34a;backdrop-filter:blur(8px)" : reconnecting ? "background:#ca8a04;backdrop-filter:blur(8px)" : "background:#b91c1c;backdrop-filter:blur(8px)"}
+    style:box-shadow="0 4px 12px rgba(0,0,0,0.4)"
+    style:cursor={connected ? "default" : "pointer"}
+    onclick={!connected && !reconnecting ? () => forceReconnect("ws://localhost:3005/ws") : undefined}
+    role={!connected && !reconnecting ? "button" : undefined}
+    tabindex={!connected && !reconnecting ? 0 : undefined}
+    onkeydown={(e) => {!connected && !reconnecting && e.key === 'Enter' ? forceReconnect("ws://localhost:3005/ws") : undefined}}
+  >
+    {#if connected}
+      <span class="w-2 h-2 rounded-full bg-green-400 shadow-sm shadow-green-400/50"></span>
+      <span class="text-green-100">Connected</span>
+    {:else if reconnecting}
+      <span class="animate-spin text-base leading-none">↻</span>
+      <span class="text-yellow-100">
+        Reconnecting{wsRetryCount > 0 ? ` (attempt ${wsRetryCount}/10)…` : '…'}
+      </span>
+    {:else}
+      <span class="w-2 h-2 rounded-full bg-red-400 shadow-sm shadow-red-400/50"></span>
+      <span class="text-red-100">Disconnected — click to retry</span>
     {/if}
-    <div class="flex items-center justify-center h-full">
-      <p class="text-gray-500">{reconnecting ? 'Reconnecting…' : 'Disconnected'}</p>
-    </div>
+  </div>
+
+  {#if !connected}
+    <!-- Dimmed backdrop when disconnected -->
+    <div class="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm"></div>
   {:else}
     <div class="h-full grid" style="grid-template-columns: {showLeft ? leftW + 'px' : '0px'} {showLeft ? '4px' : '0px'} 1fr {showRight ? '4px' : '0px'} {showRight ? rightW + 'px' : '0px'};">
       {#if showLeft}
