@@ -5,7 +5,7 @@ test('column resizing works', async ({ page }) => {
   await expect(page.getByText('Disconnected')).not.toBeVisible({ timeout: 10000 })
   
   // Get initial left panel width
-  const leftPanel = page.locator('div').filter({ hasText: '📁 Files' }).first()
+  const leftPanel = page.getByRole('button', { name: '📁' })
   const initialBox = await leftPanel.boundingBox()
   
   // Drag left resize handle 100px wider
