@@ -26,8 +26,10 @@ test.describe('Cross-Panel Interaction Workflow', () => {
     await page.keyboard.press('Enter')
     await page.waitForTimeout(1500)
 
-    // Step 4: Switch to Files tab
-    await page.getByRole('button', { name: 'Files' }).click()
+    // Step 4: Switch to Files tab via left panel's 📁 button (specific to sidebar)
+    const leftPanel = page.locator('.rounded-2xl.shadow-panel').first()
+    const filesButton = leftPanel.locator('button').nth(1)
+    await filesButton.click()
     await page.waitForTimeout(1500)
 
     // Step 5: Navigate to /tmp directory
@@ -74,7 +76,9 @@ test.describe('Cross-Panel Interaction Workflow', () => {
     await page.waitForTimeout(1000)
 
     // Navigate to file tree and verify file appears
-    await page.getByRole('button', { name: 'Files' }).click()
+    const leftPanel = page.locator('.rounded-2xl.shadow-panel').first()
+    const filesButton = leftPanel.locator('button').nth(1)
+    await filesButton.click()
     await page.waitForTimeout(1500)
     await page.getByRole('button', { name: '/' }).first().click()
     await page.waitForTimeout(1500)
@@ -107,7 +111,9 @@ test.describe('Cross-Panel Interaction Workflow', () => {
     await page.waitForTimeout(1000)
 
     // Step 3: Navigate to the directory in file tree
-    await page.getByRole('button', { name: 'Files' }).click()
+    const leftPanel = page.locator('.rounded-2xl.shadow-panel').first()
+    const filesButton = leftPanel.locator('button').nth(1)
+    await filesButton.click()
     await page.waitForTimeout(1500)
     await page.getByRole('button', { name: '/' }).first().click()
     await page.waitForTimeout(1500)
@@ -148,7 +154,9 @@ test.describe('Cross-Panel Interaction Workflow', () => {
     await page.waitForTimeout(1000)
 
     // Navigate to file in tree
-    await page.getByRole('button', { name: 'Files' }).click()
+    const leftPanel = page.locator('.rounded-2xl.shadow-panel').first()
+    const filesButton = leftPanel.locator('button').nth(1)
+    await filesButton.click()
     await page.waitForTimeout(1500)
     await page.getByRole('button', { name: '/' }).first().click()
     await page.waitForTimeout(1500)
