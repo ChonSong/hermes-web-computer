@@ -14,6 +14,7 @@ import (
 	"runtime"
 	"strconv"
 	"math"
+	"math/rand"
 	"sort"
 	"strings"
 	"sync"
@@ -2092,8 +2093,36 @@ func (m *Multiplexer) handleProfilesList(sess *Session, params json.RawMessage) 
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual profile listing
-	m.sendEvent(sess, Event{Protocol: "agent", Event: "profiles.list", Data: json.RawMessage(`{"profiles":[]}`)})
+
+	profiles := []map[string]interface{}{}
+	if m.configMgr != nil {
+		cfg := m.configMgr.Get()
+		if cfg != nil {
+			// Collect personality names, sorted for deterministic output
+			names := []string{}
+			for name := range cfg.Agent.Personalities {
+				names = append(names, name)
+			}
+			sort.Strings(names)
+
+			for _, name := range names {
+				desc := cfg.Agent.Personalities[name]
+				profiles = append(profiles, map[string]interface{}{
+					"id":          name,
+					"name":        name,
+					"description": desc,
+					"type":        "personality",
+					"active":      false,
+				})
+			}
+		}
+	}
+
+	m.sendEvent(sess, Event{
+		Protocol: "agent",
+		Event:    "profiles.list",
+		Data:     json.RawMessage(mustMarshal(map[string]interface{}{"profiles": profiles})),
+	})
 }
 
 func (m *Multiplexer) handleProfilesGet(sess *Session, params json.RawMessage) {
@@ -2103,8 +2132,28 @@ func (m *Multiplexer) handleProfilesGet(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual profile retrieval
-	m.sendEvent(sess, Event{Protocol: "agent", Event: "profiles.get", Data: json.RawMessage(`{"profile":null}`)})
+
+	var profile interface{}
+	if m.configMgr != nil && p.ID != "" {
+		cfg := m.configMgr.Get()
+		if cfg != nil {
+			if desc, ok := cfg.Agent.Personalities[p.ID]; ok {
+				profile = map[string]interface{}{
+					"id":          p.ID,
+					"name":        p.ID,
+					"description": desc,
+					"type":        "personality",
+					"active":      false,
+				}
+			}
+		}
+	}
+
+	m.sendEvent(sess, Event{
+		Protocol: "agent",
+		Event:    "profiles.get",
+		Data:     json.RawMessage(mustMarshal(map[string]interface{}{"profile": profile})),
+	})
 }
 
 // ---- Skill handlers ----
@@ -2116,8 +2165,71 @@ func (m *Multiplexer) handleSkillsList(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual skill listing
-	m.sendEvent(sess, Event{Protocol: "agent", Event: "skills.list", Data: json.RawMessage(`{"skills":[]}`)})
+
+	type skillEntry struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+		Category    string `json:"category"`
+		Enabled     bool   `json:"enabled"`
+	}
+
+	skills := []skillEntry{}
+
+	home, err := os.UserHomeDir()
+	if err == nil {
+		skillsRoot := filepath.Join(home, ".hermes", "skills")
+
+		// Walk <category>/<skill-name>/SKILL.md
+		categories, err := os.ReadDir(skillsRoot)
+		if err == nil {
+			for _, cat := range categories {
+				if !cat.IsDir() {
+					continue
+				}
+				catName := cat.Name()
+				if p.Category != "" && catName != p.Category {
+					continue
+				}
+
+				skillDirs, err := os.ReadDir(filepath.Join(skillsRoot, catName))
+				if err != nil {
+					continue
+				}
+
+				for _, skillDir := range skillDirs {
+					if !skillDir.IsDir() {
+						continue
+					}
+					skillName := skillDir.Name()
+					skillMDPath := filepath.Join(skillsRoot, catName, skillName, "SKILL.md")
+
+					data, err := os.ReadFile(skillMDPath)
+					if err != nil {
+						continue
+					}
+
+					desc := parseSkillDescription(string(data))
+					skills = append(skills, skillEntry{
+						Name:        skillName,
+						Description: desc,
+						Category:    catName,
+						Enabled:     false,
+					})
+				}
+			}
+		}
+	}
+
+	// Sort by name for deterministic output
+	sort.Slice(skills, func(i, j int) bool {
+		return skills[i].Name < skills[j].Name
+	})
+
+	m.sendEvent(sess, Event{
+		Protocol: "agent",
+		Event:    "skills.list",
+		Data:     json.RawMessage(mustMarshal(map[string]interface{}{"skills": skills})),
+	})
 }
 
 func (m *Multiplexer) handleSkillsContent(sess *Session, params json.RawMessage) {
@@ -2127,15 +2239,128 @@ func (m *Multiplexer) handleSkillsContent(sess *Session, params json.RawMessage)
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual skill content retrieval
-	m.sendEvent(sess, Event{Protocol: "agent", Event: "skills.content", Data: json.RawMessage(`{"content":""}`)})
+
+	content := ""
+
+	if p.Name != "" {
+		home, err := os.UserHomeDir()
+		if err == nil {
+			skillsRoot := filepath.Join(home, ".hermes", "skills")
+
+			filepath.Walk(skillsRoot, func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return nil // skip inaccessible paths
+				}
+				if info.IsDir() || filepath.Base(path) != "SKILL.md" {
+					return nil
+				}
+
+				// Check if this SKILL.md's frontmatter name matches
+				data, err := os.ReadFile(path)
+				if err != nil {
+					return nil
+				}
+
+				if skillNameMatches(data, p.Name) {
+					content = string(data)
+					return filepath.SkipAll // found it, stop walking
+				}
+				return nil
+			})
+		}
+	}
+
+	m.sendEvent(sess, Event{
+		Protocol: "agent",
+		Event:    "skills.content",
+		Data:     json.RawMessage(mustMarshal(map[string]interface{}{"content": content})),
+	})
+}
+
+// parseSkillDescription extracts the description field from YAML frontmatter in a SKILL.md file.
+// It uses simple line parsing rather than a YAML library.
+func parseSkillDescription(data string) string {
+	// Look for YAML frontmatter between --- markers
+	trimmed := strings.TrimSpace(data)
+	if !strings.HasPrefix(trimmed, "---") {
+		return ""
+	}
+
+	// Find end of frontmatter
+	rest := trimmed[3:]
+	endIdx := strings.Index(rest, "\n---")
+	if endIdx < 0 {
+		return ""
+	}
+
+	frontmatter := rest[:endIdx]
+	lines := strings.Split(frontmatter, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "description:") {
+			val := strings.TrimSpace(line[len("description:"):])
+			// Remove surrounding quotes if present
+			val = strings.Trim(val, `"`)
+			val = strings.Trim(val, `'`)
+			return val
+		}
+	}
+	return ""
+}
+
+// skillNameMatches checks if the SKILL.md file's frontmatter name matches the given name.
+func skillNameMatches(data []byte, name string) bool {
+	content := string(data)
+	trimmed := strings.TrimSpace(content)
+	if !strings.HasPrefix(trimmed, "---") {
+		return filepath.Base(string(data)) == name // fallback to filename
+	}
+
+	rest := trimmed[3:]
+	endIdx := strings.Index(rest, "\n---")
+	if endIdx < 0 {
+		return false
+	}
+
+	frontmatter := rest[:endIdx]
+	lines := strings.Split(frontmatter, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "name:") {
+			val := strings.TrimSpace(line[len("name:"):])
+			val = strings.Trim(val, `"`)
+			val = strings.Trim(val, `'`)
+			return val == name
+		}
+	}
+	return false
 }
 
 // ---- Cron handlers ----
 
 func (m *Multiplexer) handleCronsList(sess *Session, params json.RawMessage) {
-	// TODO: implement actual cron listing
-	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.list", Data: json.RawMessage(`{"crons":[]}`)})
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.list", Data: json.RawMessage(`{"crons":[]}`)})
+		return
+	}
+	path := filepath.Join(home, ".hermes", "cron", "jobs.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.list", Data: json.RawMessage(`{"crons":[]}`)})
+		return
+	}
+	var result struct {
+		Jobs []json.RawMessage `json:"jobs"`
+	}
+	if err := json.Unmarshal(data, &result); err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.list", Data: json.RawMessage(`{"crons":[]}`)})
+		return
+	}
+	if result.Jobs == nil {
+		result.Jobs = []json.RawMessage{}
+	}
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.list", Data: json.RawMessage(mustMarshal(map[string]interface{}{"crons": result.Jobs}))})
 }
 
 func (m *Multiplexer) handleCronsCreate(sess *Session, params json.RawMessage) {
@@ -2148,8 +2373,61 @@ func (m *Multiplexer) handleCronsCreate(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual cron creation
-	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.create", Data: json.RawMessage(`{"cron":{"id":""}}`)})
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.create", Data: json.RawMessage(`{"cron":{"id":""}}`)})
+		return
+	}
+	cronPath := filepath.Join(home, ".hermes", "cron", "jobs.json")
+
+	// Read existing jobs
+	var cronFile struct {
+		Jobs      []json.RawMessage `json:"jobs"`
+		UpdatedAt string            `json:"updated_at"`
+	}
+	data, err := os.ReadFile(cronPath)
+	if err == nil {
+		json.Unmarshal(data, &cronFile)
+	}
+	if cronFile.Jobs == nil {
+		cronFile.Jobs = []json.RawMessage{}
+	}
+
+	// Generate unique 12-char hex ID
+	id := fmt.Sprintf("%x", rand.Int63())
+
+	// Build schedule display
+	scheduleDisplay := p.Schedule
+	if scheduleDisplay == "" {
+		scheduleDisplay = "once"
+	}
+
+	// Create new job map
+	newJob := map[string]interface{}{
+		"id":              id,
+		"name":            p.Name,
+		"prompt":          p.Command,
+		"schedule":        map[string]interface{}{"kind": "cron", "cron": p.Schedule, "display": scheduleDisplay},
+		"schedule_display": scheduleDisplay,
+		"enabled":         p.Enabled,
+		"state":           "scheduled",
+		"created_at":      time.Now().UTC().Format(time.RFC3339Nano),
+		"last_run_at":     nil,
+		"last_status":     nil,
+		"last_error":      nil,
+		"model":           nil,
+		"provider":        nil,
+	}
+
+	jobData, _ := json.Marshal(newJob)
+	cronFile.Jobs = append(cronFile.Jobs, jobData)
+	cronFile.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+
+	outData, _ := json.Marshal(cronFile)
+	os.WriteFile(cronPath, outData, 0644)
+
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.create", Data: json.RawMessage(mustMarshal(map[string]interface{}{"cron": map[string]string{"id": id}}))})
 }
 
 func (m *Multiplexer) handleCronsUpdate(sess *Session, params json.RawMessage) {
@@ -2163,7 +2441,69 @@ func (m *Multiplexer) handleCronsUpdate(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual cron update
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.update", Data: json.RawMessage(`{"success":false,"error":"cannot determine home directory"}`)})
+		return
+	}
+	cronPath := filepath.Join(home, ".hermes", "cron", "jobs.json")
+
+	data, err := os.ReadFile(cronPath)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.update", Data: json.RawMessage(`{"success":false,"error":"cannot read cron file"}`)})
+		return
+	}
+
+	var cronFile struct {
+		Jobs      []json.RawMessage `json:"jobs"`
+		UpdatedAt string            `json:"updated_at"`
+	}
+	if err := json.Unmarshal(data, &cronFile); err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.update", Data: json.RawMessage(`{"success":false,"error":"invalid cron file"}`)})
+		return
+	}
+
+	found := false
+	for i, jobData := range cronFile.Jobs {
+		var job map[string]interface{}
+		if err := json.Unmarshal(jobData, &job); err != nil {
+			continue
+		}
+		jobID, _ := job["id"].(string)
+		if jobID != p.ID {
+			continue
+		}
+		found = true
+
+		if p.Name != "" {
+			job["name"] = p.Name
+		}
+		if p.Command != "" {
+			job["prompt"] = p.Command
+		}
+		if p.Schedule != "" {
+			job["schedule"] = map[string]interface{}{"kind": "cron", "cron": p.Schedule, "display": p.Schedule}
+			job["schedule_display"] = p.Schedule
+		}
+		if p.Enabled != nil {
+			job["enabled"] = *p.Enabled
+		}
+
+		updatedData, _ := json.Marshal(job)
+		cronFile.Jobs[i] = updatedData
+		break
+	}
+
+	if !found {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.update", Data: json.RawMessage(`{"success":false,"error":"job not found"}`)})
+		return
+	}
+
+	cronFile.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	outData, _ := json.Marshal(cronFile)
+	os.WriteFile(cronPath, outData, 0644)
+
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.update", Data: json.RawMessage(`{"success":true}`)})
 }
 
@@ -2174,7 +2514,54 @@ func (m *Multiplexer) handleCronsDelete(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual cron deletion
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.delete", Data: json.RawMessage(`{"success":false,"error":"cannot determine home directory"}`)})
+		return
+	}
+	cronPath := filepath.Join(home, ".hermes", "cron", "jobs.json")
+
+	data, err := os.ReadFile(cronPath)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.delete", Data: json.RawMessage(`{"success":false,"error":"cannot read cron file"}`)})
+		return
+	}
+
+	var cronFile struct {
+		Jobs      []json.RawMessage `json:"jobs"`
+		UpdatedAt string            `json:"updated_at"`
+	}
+	if err := json.Unmarshal(data, &cronFile); err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.delete", Data: json.RawMessage(`{"success":false,"error":"invalid cron file"}`)})
+		return
+	}
+
+	found := false
+	filtered := make([]json.RawMessage, 0, len(cronFile.Jobs))
+	for _, jobData := range cronFile.Jobs {
+		var job map[string]interface{}
+		if err := json.Unmarshal(jobData, &job); err != nil {
+			continue
+		}
+		jobID, _ := job["id"].(string)
+		if jobID == p.ID {
+			found = true
+			continue // skip this job (delete it)
+		}
+		filtered = append(filtered, jobData)
+	}
+
+	if !found {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.delete", Data: json.RawMessage(`{"success":false,"error":"job not found"}`)})
+		return
+	}
+
+	cronFile.Jobs = filtered
+	cronFile.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	outData, _ := json.Marshal(cronFile)
+	os.WriteFile(cronPath, outData, 0644)
+
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.delete", Data: json.RawMessage(`{"success":true}`)})
 }
 
@@ -2185,7 +2572,58 @@ func (m *Multiplexer) handleCronsPause(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual cron pause
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.pause", Data: json.RawMessage(`{"success":false,"error":"cannot determine home directory"}`)})
+		return
+	}
+	cronPath := filepath.Join(home, ".hermes", "cron", "jobs.json")
+
+	data, err := os.ReadFile(cronPath)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.pause", Data: json.RawMessage(`{"success":false,"error":"cannot read cron file"}`)})
+		return
+	}
+
+	var cronFile struct {
+		Jobs      []json.RawMessage `json:"jobs"`
+		UpdatedAt string            `json:"updated_at"`
+	}
+	if err := json.Unmarshal(data, &cronFile); err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.pause", Data: json.RawMessage(`{"success":false,"error":"invalid cron file"}`)})
+		return
+	}
+
+	found := false
+	for i, jobData := range cronFile.Jobs {
+		var job map[string]interface{}
+		if err := json.Unmarshal(jobData, &job); err != nil {
+			continue
+		}
+		jobID, _ := job["id"].(string)
+		if jobID != p.ID {
+			continue
+		}
+		found = true
+		job["state"] = "paused"
+		job["enabled"] = false
+		now := time.Now().UTC().Format(time.RFC3339Nano)
+		job["paused_at"] = now
+		updatedData, _ := json.Marshal(job)
+		cronFile.Jobs[i] = updatedData
+		break
+	}
+
+	if !found {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.pause", Data: json.RawMessage(`{"success":false,"error":"job not found"}`)})
+		return
+	}
+
+	cronFile.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	outData, _ := json.Marshal(cronFile)
+	os.WriteFile(cronPath, outData, 0644)
+
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.pause", Data: json.RawMessage(`{"success":true}`)})
 }
 
@@ -2196,7 +2634,56 @@ func (m *Multiplexer) handleCronsResume(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual cron resume
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.resume", Data: json.RawMessage(`{"success":false,"error":"cannot determine home directory"}`)})
+		return
+	}
+	cronPath := filepath.Join(home, ".hermes", "cron", "jobs.json")
+
+	data, err := os.ReadFile(cronPath)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.resume", Data: json.RawMessage(`{"success":false,"error":"cannot read cron file"}`)})
+		return
+	}
+
+	var cronFile struct {
+		Jobs      []json.RawMessage `json:"jobs"`
+		UpdatedAt string            `json:"updated_at"`
+	}
+	if err := json.Unmarshal(data, &cronFile); err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.resume", Data: json.RawMessage(`{"success":false,"error":"invalid cron file"}`)})
+		return
+	}
+
+	found := false
+	for i, jobData := range cronFile.Jobs {
+		var job map[string]interface{}
+		if err := json.Unmarshal(jobData, &job); err != nil {
+			continue
+		}
+		jobID, _ := job["id"].(string)
+		if jobID != p.ID {
+			continue
+		}
+		found = true
+		job["state"] = "scheduled"
+		job["enabled"] = true
+		updatedData, _ := json.Marshal(job)
+		cronFile.Jobs[i] = updatedData
+		break
+	}
+
+	if !found {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.resume", Data: json.RawMessage(`{"success":false,"error":"job not found"}`)})
+		return
+	}
+
+	cronFile.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	outData, _ := json.Marshal(cronFile)
+	os.WriteFile(cronPath, outData, 0644)
+
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.resume", Data: json.RawMessage(`{"success":true}`)})
 }
 
@@ -2207,7 +2694,57 @@ func (m *Multiplexer) handleCronsRun(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual cron run
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.run", Data: json.RawMessage(`{"success":false,"error":"cannot determine home directory"}`)})
+		return
+	}
+	cronPath := filepath.Join(home, ".hermes", "cron", "jobs.json")
+
+	data, err := os.ReadFile(cronPath)
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.run", Data: json.RawMessage(`{"success":false,"error":"cannot read cron file"}`)})
+		return
+	}
+
+	var cronFile struct {
+		Jobs      []json.RawMessage `json:"jobs"`
+		UpdatedAt string            `json:"updated_at"`
+	}
+	if err := json.Unmarshal(data, &cronFile); err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.run", Data: json.RawMessage(`{"success":false,"error":"invalid cron file"}`)})
+		return
+	}
+
+	found := false
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	for i, jobData := range cronFile.Jobs {
+		var job map[string]interface{}
+		if err := json.Unmarshal(jobData, &job); err != nil {
+			continue
+		}
+		jobID, _ := job["id"].(string)
+		if jobID != p.ID {
+			continue
+		}
+		found = true
+		job["last_run_at"] = now
+		job["state"] = "running"
+		updatedData, _ := json.Marshal(job)
+		cronFile.Jobs[i] = updatedData
+		break
+	}
+
+	if !found {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.run", Data: json.RawMessage(`{"success":false,"error":"job not found"}`)})
+		return
+	}
+
+	cronFile.UpdatedAt = now
+	outData, _ := json.Marshal(cronFile)
+	os.WriteFile(cronPath, outData, 0644)
+
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "crons.run", Data: json.RawMessage(`{"success":true}`)})
 }
 
@@ -2221,8 +2758,54 @@ func (m *Multiplexer) handleMemoryRead(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual memory read
-	m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.read", Data: json.RawMessage(`{"value":""}`)})
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.read", Data: json.RawMessage(`{"value":""}`)})
+		return
+	}
+
+	// Determine which memory file to read
+	namespace := p.Namespace
+	if namespace == "" {
+		namespace = "memory"
+	}
+
+	var fileName string
+	if namespace == "user" {
+		fileName = "USER.md"
+	} else {
+		fileName = "MEMORY.md"
+	}
+
+	memPath := filepath.Join(home, ".hermes", "memories", fileName)
+	data, err := os.ReadFile(memPath)
+	if err != nil {
+		// File doesn't exist or can't be read — return empty
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.read", Data: json.RawMessage(`{"value":""}`)})
+		return
+	}
+
+	content := string(data)
+
+	// If key is provided, search for that key in the content
+	if p.Key != "" {
+		lines := strings.Split(content, "\n")
+		var matched strings.Builder
+		keyPrefix := strings.ToLower(p.Key) + ":"
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(strings.ToLower(trimmed), keyPrefix) {
+				if matched.Len() > 0 {
+					matched.WriteString("\n")
+				}
+				matched.WriteString(line)
+			}
+		}
+		content = matched.String()
+	}
+
+	m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.read", Data: json.RawMessage(mustMarshal(map[string]string{"value": content}))})
 }
 
 func (m *Multiplexer) handleMemoryWrite(sess *Session, params json.RawMessage) {
@@ -2234,7 +2817,73 @@ func (m *Multiplexer) handleMemoryWrite(sess *Session, params json.RawMessage) {
 	if params != nil {
 		json.Unmarshal(params, &p)
 	}
-	// TODO: implement actual memory write
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.write", Data: json.RawMessage(`{"success":false,"error":"cannot determine home directory"}`)})
+		return
+	}
+
+	namespace := p.Namespace
+	if namespace == "" {
+		namespace = "memory"
+	}
+
+	var fileName string
+	if namespace == "user" {
+		fileName = "USER.md"
+	} else {
+		fileName = "MEMORY.md"
+	}
+
+	memPath := filepath.Join(home, ".hermes", "memories", fileName)
+
+	// Ensure directory exists
+	os.MkdirAll(filepath.Dir(memPath), 0755)
+
+	if p.Key != "" {
+		// Read existing content and update the specific key
+		existingContent := ""
+		if data, err := os.ReadFile(memPath); err == nil {
+			existingContent = string(data)
+		}
+
+		lines := strings.Split(existingContent, "\n")
+		keyPrefix := strings.ToLower(p.Key) + ":"
+		found := false
+		var updated strings.Builder
+
+		for _, line := range lines {
+			trimmed := strings.TrimSpace(line)
+			if strings.HasPrefix(strings.ToLower(trimmed), keyPrefix) {
+				// Replace this line with the new key: value
+				if updated.Len() > 0 {
+					updated.WriteString("\n")
+				}
+				updated.WriteString(p.Key + ": " + p.Value)
+				found = true
+			} else {
+				if updated.Len() > 0 {
+					updated.WriteString("\n")
+				}
+				updated.WriteString(line)
+			}
+		}
+
+		if !found {
+			// Append new key: value line
+			if updated.Len() > 0 {
+				updated.WriteString("\n")
+			}
+			updated.WriteString(p.Key + ": " + p.Value)
+		}
+
+		os.WriteFile(memPath, []byte(updated.String()), 0644)
+	} else {
+		// No key — write the value directly as the entire file content
+		os.WriteFile(memPath, []byte(p.Value), 0644)
+	}
+
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "memory.write", Data: json.RawMessage(`{"success":true}`)})
 }
 

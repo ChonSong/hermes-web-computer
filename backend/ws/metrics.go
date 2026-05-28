@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strconv"
 	"strings"
@@ -248,6 +249,7 @@ func readTemperature() (float64, string) {
 }
 
 // readWifiStatus checks wifi interface state and returns connected bool + SSID string.
+// Matches both legacy "wlan" and modern "wl*" interface naming (e.g. wlp2s0).
 func readWifiStatus() (bool, string) {
 	// Check for wifi interfaces via /sys/class/net/
 	entries, err := os.ReadDir("/sys/class/net")
@@ -256,7 +258,7 @@ func readWifiStatus() (bool, string) {
 	}
 	for _, entry := range entries {
 		name := entry.Name()
-		if !strings.HasPrefix(name, "wlan") {
+		if !strings.HasPrefix(name, "wlan") && !strings.HasPrefix(name, "wl") {
 			continue
 		}
 		operstate, err := os.ReadFile("/sys/class/net/" + name + "/operstate")
@@ -265,9 +267,22 @@ func readWifiStatus() (bool, string) {
 		}
 		connected := strings.TrimSpace(string(operstate)) == "up"
 		var ssid string
-		// Try to read SSID from iwconfig fallback (skip if not root)
 		if connected {
-			ssid = "wlan" // default label when we can't read iwconfig
+			// Try reading /proc/net/wireless for link quality (indicates active connection)
+			if wlData, err := os.ReadFile("/proc/net/wireless"); err == nil {
+				for _, wlLine := range strings.Split(string(wlData), "\n") {
+					wlFields := strings.Fields(wlLine)
+					if len(wlFields) >= 2 && wlFields[0] == name+":" {
+						// Interface found in wireless table — we know it's a wifi connection
+						ssid = name
+						break
+					}
+				}
+			}
+			// If /proc/net/wireless didn't yield a match, use interface name as label
+			if ssid == "" {
+				ssid = name
+			}
 		}
 		return connected, ssid
 	}
@@ -302,13 +317,80 @@ func readBatteryStatus() (percent int, charging bool, available bool) {
 	return 0, false, false
 }
 
-// readVolumeStatus attempts to read volume from pulse audio or fallback heuristics.
+// readVolumeStatus attempts to read system volume via PipeWire, PulseAudio, or ALSA.
+// Returns (volume_percent 0-100, muted). Falls back to (100, false) on failure.
 func readVolumeStatus() (int, bool) {
-	// Try to read from pactl
-	// Use simple heuristic: check if any pulse audio streams are active
-	// This is a best-effort approach since we can't run pactl reliably as non-interactive user
-	// Return sensible defaults: 100% volume, not muted
-	// Real implementation would use: pactl list sinks | grep "Volume:"
+	// 1. Try PipeWire (wpctl)
+	if out, err := exec.Command("wpctl", "get-volume").Output(); err == nil {
+		// Output formats: "Volume: 0.85  [MUTED]" or "Volume: 0.75"
+		fields := strings.Fields(strings.TrimSpace(string(out)))
+		if len(fields) >= 2 {
+			if v, err := strconv.ParseFloat(fields[1], 64); err == nil {
+				pct := int(v * 100)
+				if pct > 100 {
+					pct = 100
+				} else if pct < 0 {
+					pct = 0
+				}
+				return pct, strings.Contains(string(out), "MUTED")
+			}
+		}
+	}
+
+	// 2. Try PulseAudio (pactl)
+	if out, err := exec.Command("pactl", "list", "sinks").Output(); err == nil {
+		output := string(out)
+		// Look for "Mute: yes" or "Mute: no"
+		muted := strings.Contains(output, "Mute: yes")
+		// Look for "Volume: front-left: NNNN / N%"
+		for _, line := range strings.Split(output, "\n") {
+			if strings.Contains(line, "front-left:") || strings.Contains(line, "Volume:") {
+				fields := strings.Fields(line)
+				for _, f := range fields {
+					if strings.HasSuffix(f, "%") {
+						val := strings.TrimSuffix(f, "%")
+						if v, err := strconv.Atoi(val); err == nil {
+							if v > 100 {
+								v = 100
+							} else if v < 0 {
+								v = 0
+							}
+							return v, muted
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 3. Try ALSA via /proc/asound/card*/pcm*/sub*/status
+	entries, err := os.ReadDir("/proc/asound")
+	if err == nil {
+		for _, entry := range entries {
+			if !strings.HasPrefix(entry.Name(), "card") {
+				continue
+			}
+			cardDir := "/proc/asound/" + entry.Name()
+			pcmEntries, err := os.ReadDir(cardDir)
+			if err != nil {
+				continue
+			}
+			for _, pcm := range pcmEntries {
+				subDir := cardDir + "/" + pcm.Name() + "/sub0"
+				statusFile := subDir + "/status"
+				data, err := os.ReadFile(statusFile)
+				if err != nil {
+					continue
+				}
+				status := strings.TrimSpace(string(data))
+				if strings.Contains(status, "RUNNING") || strings.Contains(status, "OPEN") {
+					return 100, false
+				}
+			}
+		}
+	}
+
+	// 4. Fallback: sensible defaults
 	return 100, false
 }
 

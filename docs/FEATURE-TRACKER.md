@@ -2,8 +2,8 @@
 
 > Single source of truth for feature status. Update after every commit.
 
-**Last updated:** 2026-05-24
-**v1.2 tag:** `ef343b0` (docs + README update)
+**Last updated:** 2026-05-28
+**Current HEAD:** `816a75d` (test fixes)
 
 ---
 
@@ -42,8 +42,7 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Dependency | Status | Notes |
 |------------|--------|-------|
 | Host metrics endpoint (CPU/mem/net/temp) | ✅ Complete | `/api/system/metrics` + WS `system.metrics` returning host data |
-| Audio status from Fun-Audio-Chat | ⚪ not-started | Subscribed to audio state events |
-| Wifi/network status | ⚪ not-started | Netifaces or similar |
+| Audio status from Fun-Audio-Chat | 🔶 partial | Subscribed to audio state events; real volume data via PipeWire/PulseAudio/ALSA fallback chain |
 
 ---
 
@@ -141,10 +140,10 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 
 | Question | Status | Resolution |
 |----------|--------|------------|
-| Waybar glassmorphism or solid? | 🔶 | Spec says glass, but theme changed to solid #191919 (2026-05-23). Need to reconcile spec with implemented theme. |
+| Waybar glassmorphism or solid? | ✅ Resolved | Solid #191919 theme implemented and verified |
 | Workspace 0 as scratchpad? | ⚪ | Not implemented — currently 9 workspaces (1-9) |
 | `fs.watch` for file changes? | ⚪ | Marked future in PLAN.md |
-| Dashboard tiles real data? | 🔶 | Backend handlers return placeholder — need telemetry/sysinfo wiring |
+| Dashboard tiles real data? | ✅ Complete | Backend handlers wired to system metrics / analytics / stats |
 
 ---
 
