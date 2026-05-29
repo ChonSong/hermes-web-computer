@@ -2,8 +2,8 @@
 
 > Single source of truth for feature status. Update after every commit.
 
-**Last updated:** 2026-05-28
-**Current HEAD:** `816a75d` (test fixes)
+**Last updated:** 2026-05-29
+**Current HEAD:** `30dc005` (v1.3 shell backend handlers)
 
 ---
 
@@ -131,7 +131,7 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Rebuild + deploy check | every 240m | ⚠️ Path wrong | ok | Points to `/opt/data/hermes-web-computer` — should be `/home/sean/.hermes/hermes-web-computer` |
 | HWC canary watch | every 360m | ⚠️ Port wrong | ok | Targets `:3001` — should be `:3005` |
 | HWC Visual QA | every 720m | ❌ Error | error | Targets `:3113` — should be `:3005`; wrong skill |
-| Phase Engine | hourly | ❌ Error | error | State dir doesn't exist — disabled, use manual |
+| Phase Engine | hourly | ❌ Error | error | State dir exists at /opt/data/hermes-web-computer/state/CHECKPOINTS — Phase 14 done |
 | Nightly build health | not set | ⚪ not-started | — | `go build + go test + npm run build` → 2am Sydney |
 
 ---
