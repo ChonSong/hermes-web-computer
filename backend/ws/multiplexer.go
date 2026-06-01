@@ -139,7 +139,7 @@ func NewMultiplexer() *Multiplexer {
 		startTime:  time.Now(),
 	}
 	if m.hermesURL == "" {
-		m.hermesURL = "http://localhost:8642"
+		m.hermesURL = "http://localhost:8787"
 	}
 	// Load security config (use defaults if file not found)
 	homeDir, _ := os.UserHomeDir()
