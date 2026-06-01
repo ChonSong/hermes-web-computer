@@ -96,12 +96,18 @@ test.describe('ws-flood', () => {
     await page.goto('/')
     await expect(page.locator('#app')).toBeVisible({ timeout: 10_000 })
 
-    // Open multiple WS connections simultaneously
+    // Open multiple WS connections simultaneously, wait for open before sending
     await page.evaluate(async () => {
       const sockets: WebSocket[] = []
       for (let i = 0; i < 5; i++) {
         const socket = new WebSocket('ws://localhost:3005/ws')
         sockets.push(socket)
+        // Wait for connection to be OPEN before sending
+        await new Promise<void>((resolve) => {
+          if (socket.readyState === WebSocket.OPEN) { resolve(); return }
+          socket.onopen = () => resolve()
+          socket.onerror = () => resolve() // don't hang on error
+        })
         socket.send(JSON.stringify({
           protocol: 'ui',
           method: 'apps.list',

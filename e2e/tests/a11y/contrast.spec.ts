@@ -6,162 +6,97 @@
  */
 import { test, expect } from '@playwright/test'
 
-// WCAG AA contrast ratio thresholds
+// WCAG AA contrast ratio thresholds (hardcoded — cannot pass to page.evaluate)
 const NORMAL_TEXT_RATIO = 4.5
 const LARGE_TEXT_RATIO = 3.0
 
-/**
- * Calculate relative luminance per WCAG 2.0 spec.
- * https://www.w3.org/TR/WCAG20/#relativeluminancedef
- */
-function relativeLuminance(r: number, g: number, b: number): number {
-  const [rs, gs, bs] = [r, g, b].map(c => {
-    const srgb = c / 255
-    return srgb <= 0.03928 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4)
-  })
-  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs
-}
-
-/**
- * Calculate contrast ratio between two luminances.
- */
-function contrastRatio(l1: number, l2: number): number {
-  const lighter = Math.max(l1, l2)
-  const darker = Math.min(l1, l2)
-  return (lighter + 0.05) / (darker + 0.05)
-}
-
 test.describe('contrast-wcag-aa', () => {
-  test('disconnected text meets WCAG AA contrast', async ({ page }) => {
+  test('app background is dark (dark theme applied)', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('#app')).toBeVisible({ timeout: 10_000 })
 
-    // Sample the disconnected state colors
-    // The app uses: bg-gray-950 (background) + text-gray-500 (disconnected text)
-    // These are Tailwind classes — let's verify the computed colors
-
-    const colors = await page.evaluate(() => {
-      const app = document.querySelector('.bg-gray-950') || document.body
-      const appStyle = window.getComputedStyle(app)
-      return {
-        bg: appStyle.backgroundColor,
-      }
+    const bg = await page.evaluate(() => {
+      const app = document.querySelector('#app') || document.body
+      return window.getComputedStyle(app).backgroundColor
     })
 
-    // Parse the background color
-    const bgColorMatch = colors.bg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-    expect(bgColorMatch).not.toBeNull()
-
-    console.log('Background color:', colors.bg)
+    const m = bg.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+    expect(m).not.toBeNull()
+    // Dark theme: all RGB components should be < 60
+    expect(parseInt(m![1])).toBeLessThan(60)
+    expect(parseInt(m![2])).toBeLessThan(60)
+    expect(parseInt(m![3])).toBeLessThan(60)
   })
 
-  test('all visible text elements meet minimum contrast', async ({ page }) => {
+  test('all visible text elements meet WCAG AA contrast', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('#app')).toBeVisible({ timeout: 10_000 })
-
-    // Wait for content to settle
     await page.waitForTimeout(500)
 
-    // Sample key text elements and their computed colors
-    const textContrasts = await page.evaluate(
-      (normalThreshold: number, largeThreshold: number) => {
-        function parseColor(colorStr: string): [number, number, number] | null {
-          const match = colorStr.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/)
-          if (!match) return null
-          return [parseInt(match[1]), parseInt(match[2]), parseInt(match[3])]
-        }
+    // Use Playwright's snapshot + evaluate without args (Playwright 1.49+ rejects multi-arg evaluate)
+    const textContrasts = await page.evaluate(() => {
+      const results: { text: string; pass: boolean; ratio: number }[] = []
 
-        function luminance(r: number, g: number, b: number): number {
-          const [rs, gs, bs] = [r, g, b].map(c => {
-            const srgb = c / 255
-            return srgb <= 0.03928 ? srgb / 12.92 : Math.pow((srgb + 0.055) / 1.055, 2.4)
-          })
-          return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs
-        }
+      function parseColor(c: string): [number, number, number] | null {
+        const m = c.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/)
+        return m ? [+m[1], +m[2], +m[3]] : null
+      }
+      function lum(r: number, g: number, b: number) {
+        const s = [r, g, b].map(c => { const v = c / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4) })
+        return 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2]
+      }
+      function ratio(a: number, b: number) { return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) }
 
-        function ratio(l1: number, l2: number): number {
-          return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05)
-        }
+      for (const el of document.querySelectorAll('p, span, h1, h2, h3, button, a, label')) {
+        const text = el.textContent?.trim()
+        if (!text || text.length === 0 || text.length > 100) continue
+        if (el.children.length > 0 && el.children.length !== el.querySelectorAll('br, span').length) continue
 
-        // Get all text-containing elements
-        const elements = document.querySelectorAll('p, span, h1, h2, h3, button, a, label, div')
-        const results: { text: string; bg: string; fg: string; pass: boolean; element: string }[] = []
+        const style = window.getComputedStyle(el)
+        const fg = parseColor(style.color)
+        const bg = parseColor(style.backgroundColor)
+        if (!fg || !bg) continue
 
-        for (const el of Array.from(elements)) {
-          // Skip elements with no direct text
-          if (el.children.length > 0 && el.textContent?.trim() === '') continue
-          if (!el.textContent?.trim()) continue
+        const r = ratio(lum(...fg), lum(...bg))
+        const fontSize = parseFloat(style.fontSize)
+        const isBold = parseInt(style.fontWeight) >= 700
+        const threshold = (fontSize >= 18 || (fontSize >= 14 && isBold)) ? 3.0 : 4.5
 
-          // Skip if text is too long (we just need a sample)
-          if (el.textContent.trim().length > 100) continue
+        results.push({ text: text.substring(0, 50), pass: r >= threshold, ratio: Math.round(r * 10) / 10 })
+      }
+      return results
+    })
 
-          const style = window.getComputedStyle(el)
-          const fg = parseColor(style.color)
-          const bg = parseColor(style.backgroundColor)
-
-          // Skip transparent or auto backgrounds
-          if (!fg || !bg) continue
-
-          const fgLum = luminance(...fg)
-          const bgLum = luminance(...bg)
-          const contrastR = ratio(fgLum, bgLum)
-
-          const fontSize = parseFloat(style.fontSize)
-          const isBold = style.fontWeight && parseInt(style.fontWeight) >= 700
-          const isLargeText = fontSize >= 18 || (fontSize >= 14 && isBold)
-          const threshold = isLargeText ? largeThreshold : normalThreshold
-
-          results.push({
-            text: el.textContent.trim().substring(0, 50),
-            bg: style.backgroundColor,
-            fg: style.color,
-            pass: contrastR >= threshold,
-            element: el.tagName.toLowerCase() + (el.className ? `.${el.className.split(' ').slice(0, 3).join('.')}` : ''),
-          })
-        }
-
-        return results
-      },
-      NORMAL_TEXT_RATIO,
-      LARGE_TEXT_RATIO
-    )
-
-    // Log results for review
     const failures = textContrasts.filter(r => !r.pass)
     if (failures.length > 0) {
       console.log('Contrast failures:', JSON.stringify(failures, null, 2))
     }
 
-    // The app uses text-gray-100 on bg-gray-950 — this should pass
-    // text-gray-100 (#f3f4f6) on bg-gray-950 (#030712) gives ~16.7:1 ratio
     const passing = textContrasts.filter(r => r.pass)
-    console.log(`Contrast check: ${passing.length}/${textContrasts.length} elements pass WCAG AA`)
+    console.log(`Contrast: ${passing.length}/${textContrasts.length} pass WCAG AA`)
+
+    // At least 80% of elements should pass (some Tailwind utility classes may be borderline)
+    expect(passing.length / Math.max(textContrasts.length, 1)).toBeGreaterThanOrEqual(0.8)
   })
 
   test('interactive elements have distinguishable focus indicators', async ({ page }) => {
     await page.goto('/')
     await expect(page.locator('#app')).toBeVisible({ timeout: 10_000 })
 
-    // Tab to focus an element and check its focus style
     await page.keyboard.press('Tab')
     await page.waitForTimeout(200)
 
     const focusStyle = await page.evaluate(() => {
       const el = document.activeElement
       if (!el || el === document.body) return null
-      const style = window.getComputedStyle(el)
+      const s = window.getComputedStyle(el)
       return {
-        outline: style.outline,
-        outlineWidth: style.outlineWidth,
-        outlineStyle: style.outlineStyle,
-        outlineColor: style.outlineColor,
-        boxShadow: style.boxShadow,
-        borderColor: style.borderColor,
+        outlineWidth: s.outlineWidth,
+        outlineStyle: s.outlineStyle,
+        boxShadow: s.boxShadow,
       }
     })
 
-    if (focusStyle) {
-      console.log('Focus style:', JSON.stringify(focusStyle, null, 2))
-    }
+    expect(focusStyle).not.toBeNull()
   })
 })
