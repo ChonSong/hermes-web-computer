@@ -1,33 +1,30 @@
 package ws
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
+	"math"
+	"math/rand"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"math"
-	"math/rand"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
 	"time"
 
 	"nhooyr.io/websocket"
-
-	"hermes-web-computer/backend/docker"
 	"hermes-web-computer/backend/agent"
 	"hermes-web-computer/backend/audio"
 	"hermes-web-computer/backend/browser"
 	"hermes-web-computer/backend/config"
+	"hermes-web-computer/backend/docker"
 	"hermes-web-computer/backend/layout"
 	"hermes-web-computer/backend/mcp"
 	"hermes-web-computer/backend/pty"
@@ -1971,115 +1968,47 @@ func (m *Multiplexer) handleChatWithHermes(sess *Session, sessionID string, mess
 	}
 }
 
-// handleToolExecute calls the Hermes Agent tool.execute API and sends the result back via WebSocket.
+// handleToolExecute streams a tool execution request to the Hermes Agent SSE endpoint
+// and sends the result back via WebSocket.
 func (m *Multiplexer) handleToolExecute(sess *Session, sessionID string, tileSessionID string, toolName string, args map[string]interface{}) {
 	argsJSON, _ := json.Marshal(args)
 
-	toolFuncDef := map[string]interface{}{
-		"name":        toolName,
-		"description": "Execute the " + toolName + " tool",
-		"parameters":  map[string]interface{}{"type": "object", "properties": map[string]interface{}{}},
-	}
-	toolSpec := map[string]interface{}{
-		"type":     "function",
-		"function": toolFuncDef,
-	}
-	toolChoice := map[string]interface{}{
-		"type":     "function",
-		"function": map[string]interface{}{"name": toolName},
-	}
-
-	reqBody := map[string]interface{}{
-		"model": "hermes-agent",
-		"messages": []map[string]interface{}{
-			{
-				"role":    "user",
-				"content": fmt.Sprintf("Please execute the tool %q with arguments: %s", toolName, string(argsJSON)),
-			},
-		},
-		"tools":       []map[string]interface{}{toolSpec},
-		"tool_choice": toolChoice,
-	}
-
-	reqData, err := json.Marshal(reqBody)
-	if err != nil {
-		data, _ := json.Marshal(map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "error": "Failed to marshal request: " + err.Error()})
-		m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.error", Data: data})
-		return
-	}
-
 	hermesURL := m.hermesURL
 	if hermesURL == "" {
-		hermesURL = "http://localhost:8642"
+		hermesURL = m.hermesURL
 	}
 
-	req, err := http.NewRequest("POST", hermesURL+"/v1/chat/completions", bytes.NewReader(reqData))
+	streamer := agent.NewStreamer(hermesURL, "")
+	toolMsg := fmt.Sprintf("Execute tool %q with arguments: %s", toolName, string(argsJSON))
+
+	var result strings.Builder
+	err := streamer.Stream(context.Background(), toolMsg, func(evt agent.StreamEvent) {
+		switch evt.Type {
+		case "token":
+			result.WriteString(evt.Content)
+		case "tool_result":
+			result.WriteString(evt.Result)
+		}
+	})
 	if err != nil {
-		data, _ := json.Marshal(map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "error": "Failed to create request: " + err.Error()})
-		m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.error", Data: data})
-		return
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := m.httpClient.Do(req)
-	if err != nil {
-		data, _ := json.Marshal(map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "error": "Hermes agent unavailable: " + err.Error()})
-		m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.error", Data: data})
-		return
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		data, _ := json.Marshal(map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "error": "Failed to read response: " + err.Error()})
+		data, _ := json.Marshal(map[string]interface{}{
+			"session_id": tileSessionID,
+			"tool_name":  toolName,
+			"error":      "Hermes agent error: " + err.Error(),
+		})
 		m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.error", Data: data})
 		return
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		data, _ := json.Marshal(map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "error": fmt.Sprintf("Hermes returned status %d: %s", resp.StatusCode, string(body))})
-		m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.error", Data: data})
-		return
+	resultStr := result.String()
+	if resultStr == "" {
+		resultStr = fmt.Sprintf("Tool %q executed (no output)", toolName)
 	}
-
-	var completionsResp struct {
-		Choices []struct {
-			Message struct {
-				ToolCalls []struct {
-					ID   string `json:"id"`
-					Type string `json:"type"`
-					Function struct {
-						Name      string `json:"name"`
-						Arguments string `json:"arguments"`
-					} `json:"function"`
-				} `json:"tool_calls"`
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
+	resultData := map[string]interface{}{
+		"session_id": tileSessionID,
+		"tool_name":  toolName,
+		"result":     resultStr,
 	}
-
-	if err := json.Unmarshal(body, &completionsResp); err != nil {
-		data, _ := json.Marshal(map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "error": "Failed to parse response: " + err.Error()})
-		m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.error", Data: data})
-		return
-	}
-
-	if len(completionsResp.Choices) == 0 {
-		data, _ := json.Marshal(map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "result": nil})
-		m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.result", Data: data})
-		return
-	}
-
-	msg := completionsResp.Choices[0].Message
-	var result string
-
-	if len(msg.ToolCalls) > 0 {
-		result = msg.ToolCalls[0].Function.Arguments
-	} else if msg.Content != "" {
-		result = msg.Content
-	}
-
-	resultData := map[string]interface{}{"session_id": tileSessionID, "tool_name": toolName, "result": json.RawMessage(mustMarshal(result))}
 	data, _ := json.Marshal(resultData)
 	m.sendEvent(sess, Event{Protocol: "agent", Event: "tool.result", Data: data})
 }
