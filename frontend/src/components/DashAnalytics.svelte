@@ -61,6 +61,7 @@
   let data = $state<AnalyticsData | null>(null)
   let loading = $state(true)
   let error = $state<string | null>(null)
+  let tab = $state<"tokens" | "models" | "skills">("tokens")
 
   const PERIODS = [
     { label: "7d", days: 7 },
@@ -91,6 +92,28 @@
     if (slashIdx > 0) return model.slice(slashIdx + 1)
     return model
   }
+
+  function formatSkillsDate(str: string | null): string {
+    if (!str) return "—"
+    try {
+      const d = new Date(str)
+      if (Number.isNaN(d.getTime())) return "—"
+      const now = new Date()
+      const diffMs = now.getTime() - d.getTime()
+      const diffMin = Math.floor(diffMs / 60000)
+      if (diffMin < 1) return "just now"
+      if (diffMin < 60) return `${diffMin}m ago`
+      const diffHr = Math.floor(diffMin / 60)
+      if (diffHr < 24) return `${diffHr}h ago`
+      const diffDays = Math.floor(diffHr / 24)
+      if (diffDays < 30) return `${diffDays}d ago`
+      return d.toLocaleDateString("en-US", { month: "short", day: "numeric" })
+    } catch {
+      return "—"
+    }
+  }
+
+  const skillsCount = $derived(data?.skills?.top_skills?.length ?? 0)
 
   async function load() {
     loading = true
@@ -177,6 +200,35 @@
         </div>
       </div>
 
+      <!-- Tab bar -->
+      <div class="flex items-center gap-1 mb-3">
+        <button
+          onclick={() => { tab = "tokens" }}
+          class="text-[9px] px-2 py-0.5 rounded transition-colors {
+            tab === 'tokens'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+          }"
+        >Tokens</button>
+        <button
+          onclick={() => { tab = "models" }}
+          class="text-[9px] px-2 py-0.5 rounded transition-colors {
+            tab === 'models'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+          }"
+        >Models</button>
+        <button
+          onclick={() => { tab = "skills" }}
+          class="text-[9px] px-2 py-0.5 rounded transition-colors flex items-center gap-1 {
+            tab === 'skills'
+              ? 'bg-blue-600 text-white'
+              : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800'
+          }"
+        >Skills{#if skillsCount > 0}<span class="text-[8px] px-1 py-0.5 rounded bg-white/20">{skillsCount}</span>{/if}</button>
+      </div>
+
+      {#if tab === "tokens"}
       <!-- Token bar chart (simplified) -->
       {#if data.daily.length > 0}
         {@const maxTokens = Math.max(...data.daily.map(d => d.input_tokens + d.output_tokens), 1)}
@@ -212,7 +264,9 @@
           </div>
         </div>
       {/if}
+      {/if}
 
+      {#if tab === "models"}
       <!-- Model usage table (top 5) -->
       {#if data.by_model.length > 0}
         <div class="bg-gray-900/50 border border-gray-800 rounded p-2.5">
@@ -242,6 +296,38 @@
             {/each}
           </div>
         </div>
+      {/if}
+      {/if}
+
+      {#if tab === "skills"}
+      <!-- Skills usage table -->
+      {#if data.skills?.top_skills?.length}
+        <div class="bg-gray-900/50 border border-gray-800 rounded p-2.5">
+          <div class="flex items-center gap-1.5 pb-1.5">
+            <svg class="w-3 h-3 text-gray-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <span class="text-[9px] font-bold uppercase tracking-wider text-gray-500">Top Skills</span>
+          </div>
+          <div class="space-y-1">
+            {#each data.skills.top_skills as s}
+              <div class="flex items-center justify-between py-0.5 text-[10px]">
+                <div class="flex items-center gap-1.5">
+                  <span class="font-mono text-gray-300">{s.skill}</span>
+                </div>
+                <div class="flex items-center gap-3 text-gray-500">
+                  <span>{s.view_count} views</span>
+                  <span>{s.manage_count} manages</span>
+                  <span class="text-gray-300">{s.total_count}</span>
+                  <span class="text-[9px]">{formatSkillsDate(s.last_used_at)}</span>
+                </div>
+              </div>
+            {/each}
+          </div>
+        </div>
+      {:else}
+        <div class="bg-gray-900/50 border border-gray-800 rounded p-2.5 text-center">
+          <p class="text-xs text-gray-500">No skill usage data</p>
+        </div>
+      {/if}
       {/if}
     {:else}
       <div class="flex flex-col items-center text-gray-500 py-8">

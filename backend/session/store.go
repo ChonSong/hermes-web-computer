@@ -39,32 +39,38 @@ type FunctionCall struct {
 
 // Session is the primary data model — mirrors hermes-webui's Session class.
 type Session struct {
-	ID        string    `json:"session_id"` // 12-char hex (uuid4[:12])
-	Title     string    `json:"title"`       // auto from first message, max 64 chars
-	Workspace string    `json:"workspace"`   // absolute path
-	Model     string    `json:"model"`       // e.g. "anthropic/claude-sonnet-4"
-	Messages  []Message `json:"messages"`
-	CreatedAt int64     `json:"created_at"`  // Unix timestamp
-	UpdatedAt int64     `json:"updated_at"`  // Unix timestamp
-	Pinned    bool      `json:"pinned"`
-	Archived  bool      `json:"archived"`
-	ProjectID string    `json:"project_id,omitempty"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	ID             string    `json:"session_id"` // 12-char hex (uuid4[:12])
+	Title          string    `json:"title"`       // auto from first message, max 64 chars
+	Workspace      string    `json:"workspace"`   // absolute path
+	Model          string    `json:"model"`       // e.g. "anthropic/claude-sonnet-4"
+	Messages       []Message `json:"messages"`
+	CreatedAt      int64     `json:"created_at"`  // Unix timestamp
+	UpdatedAt      int64     `json:"updated_at"`  // Unix timestamp
+	Pinned         bool      `json:"pinned"`
+	Archived       bool      `json:"archived"`
+	ProjectID      string    `json:"project_id,omitempty"`
+	ToolCalls      []ToolCall `json:"tool_calls,omitempty"`
+	InputTokens    int       `json:"input_tokens,omitempty"`    // Phase 6: cost ledger
+	OutputTokens   int       `json:"output_tokens,omitempty"`   // Phase 6: cost ledger
+	EstimatedCost  float64   `json:"estimated_cost,omitempty"`  // Phase 6: cost ledger in USD
 }
 
 // Compact returns a minimal representation for session list views.
 func (s *Session) Compact() map[string]interface{} {
 	return map[string]interface{}{
-		"session_id": s.ID,
-		"title":      s.Title,
-		"workspace":  s.Workspace,
-		"model":      s.Model,
-		"pinned":     s.Pinned,
-		"archived":   s.Archived,
-		"project_id": s.ProjectID,
-		"created_at": s.CreatedAt,
-		"updated_at": s.UpdatedAt,
+		"session_id":    s.ID,
+		"title":         s.Title,
+		"workspace":     s.Workspace,
+		"model":         s.Model,
+		"pinned":        s.Pinned,
+		"archived":      s.Archived,
+		"project_id":    s.ProjectID,
+		"created_at":    s.CreatedAt,
+		"updated_at":    s.UpdatedAt,
 		"message_count": len(s.Messages),
+		"input_tokens":  s.InputTokens,
+		"output_tokens": s.OutputTokens,
+		"estimated_cost": s.EstimatedCost,
 	}
 }
 

@@ -1878,12 +1878,15 @@ func (m *Multiplexer) handleChatWithHermes(sess *Session, sessionID string, mess
 		Data:     json.RawMessage(fmt.Sprintf(`{"session_id":%s}`, mustMarshal(streamID))),
 	})
 
+	// Phase 6: track full response for token estimation
 	var buf strings.Builder
+	var totalResponse strings.Builder
 
 	err := streamer.Stream(context.Background(), message, func(evt agent.StreamEvent) {
 		switch evt.Type {
 		case "token":
 			buf.WriteString(evt.Content)
+			totalResponse.WriteString(evt.Content)
 			m.sendEvent(sess, Event{
 				Protocol: "agent",
 				Event:    "chat.token",
@@ -1949,6 +1952,10 @@ func (m *Multiplexer) handleChatWithHermes(sess *Session, sessionID string, mess
 				Event:    "chat.reply",
 				Data:     json.RawMessage(`{"complete":true}`),
 			})
+			// Phase 6.2: Estimate tokens and update session cost
+			if m.sessionStore != nil && sessionID != "" {
+				estimateAndUpdateSessionCost(m, sessionID, message, totalResponse.String())
+			}
 		case "error":
 			m.sendEvent(sess, Event{
 				Protocol: "agent",
@@ -1965,6 +1972,37 @@ func (m *Multiplexer) handleChatWithHermes(sess *Session, sessionID string, mess
 			Event:    "chat.error",
 			Data:     json.RawMessage(fmt.Sprintf(`{"message":%s}`, mustMarshal(err.Error()))),
 		})
+	}
+}
+
+// estimateAndUpdateSessionCost estimates token usage from message/response text
+// and updates the session's cost tracking fields. Uses rough char/4 token estimation.
+// Phase 6.2: Cost ledger per session.
+func estimateAndUpdateSessionCost(m *Multiplexer, sessionID, message, response string) {
+	if m.sessionStore == nil || sessionID == "" {
+		return
+	}
+	sess, err := m.sessionStore.Get(sessionID)
+	if err != nil {
+		return
+	}
+	// Rough estimation: ~4 chars per token
+	inputTokens := len(message) / 4
+	outputTokens := len(response) / 4
+	if inputTokens == 0 && outputTokens == 0 {
+		return
+	}
+
+	// Model pricing (per 1M tokens) — use existing pricing table
+	inPrice, outPrice := modelPricing(sess.Model)
+	cost := (float64(inputTokens)/1_000_000)*inPrice + (float64(outputTokens)/1_000_000)*outPrice
+
+	sess.InputTokens += inputTokens
+	sess.OutputTokens += outputTokens
+	sess.EstimatedCost += cost
+
+	if err := m.sessionStore.Save(sess); err != nil {
+		log.Printf("session cost update error: %v", err)
 	}
 }
 
