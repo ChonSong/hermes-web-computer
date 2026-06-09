@@ -2,8 +2,22 @@
 
 > Single source of truth for feature status. Update after every commit.
 
-**Last updated:** 2026-05-29
-**Current HEAD:** `30dc005` (v1.3 shell backend handlers)
+**Last updated:** 2026-06-08
+**Current HEAD:** `a813c4f` (fix: visual QA scripts + E2E test failures)
+**Server:** ✅ Running on host port 3005 (PID 2652195)
+**Tunnel:** ⚠️ No Cloudflare tunnel for HWC yet (needs manual setup)
+
+---
+
+## Legend
+
+| Symbol | Meaning |
+|--------|---------|
+| ✅ | Complete and merged |
+| 🟡 | In progress (actively being worked) |
+| ⚪ | Not started |
+| ❌ | Blocked / broken |
+| 🔶 | Partially complete (known gaps) |
 
 ---
 
@@ -128,10 +142,10 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 
 | Job | Schedule | Status | Last Run | Notes |
 |-----|----------|--------|----------|-------|
-| Rebuild + deploy check | every 240m | ⚠️ Path wrong | ok | Points to `/opt/data/hermes-web-computer` — should be `/home/sean/.hermes/hermes-web-computer` |
-| HWC canary watch | every 360m | ⚠️ Port wrong | ok | Targets `:3001` — should be `:3005` |
-| HWC Visual QA | every 720m | ❌ Error | error | Targets `:3113` — should be `:3005`; wrong skill |
-| Phase Engine | hourly | ❌ Error | error | State dir exists at /opt/data/hermes-web-computer/state/CHECKPOINTS — Phase 14 done |
+| Rebuild + deploy check | every 240m | ⚠️ Paused (error) | 2026-06-05 | Server was down; now running. Needs re-enable + path fix |
+| HWC canary watch | every 360m | ⚠️ Paused (error) | 2026-06-05 | Server was down; now running. Needs re-enable |
+| HWC Visual QA | every 720m | ❌ Error | error | Script port fixed (3113→3005); needs re-enable |
+| Phase Engine | hourly | ❌ Error | error | All phases complete; job can be disabled |
 | Nightly build health | not set | ⚪ not-started | — | `go build + go test + npm run build` → 2am Sydney |
 
 ---

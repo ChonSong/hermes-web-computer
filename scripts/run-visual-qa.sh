@@ -13,8 +13,8 @@ log() {
 }
 
 # Check if HWC is running
-if ! curl -sf http://localhost:3113/ > /dev/null 2>&1; then
-    log "ERROR: HWC not running at localhost:3113"
+if ! curl -sf http://localhost:3005/ > /dev/null 2>&1; then
+    log "ERROR: HWC not running at localhost:3005"
     exit 1
 fi
 
@@ -31,7 +31,7 @@ google-chrome-stable \
     --window-size=1440,900 \
     --screenshot="$SCREENSHOT" \
     --disable-web-security \
-    http://localhost:3113 2>/dev/null
+    http://localhost:3005 2>/dev/null
 
 if [ ! -f "$SCREENSHOT" ]; then
     log "ERROR: Screenshot capture failed"

@@ -17,9 +17,9 @@ echo "Output: $SCREENS"
 echo ""
 
 # Check if server is running
-if ! curl -sf http://localhost:3113/ > /dev/null 2>&1; then
-    echo "ERROR: HWC not running at http://localhost:3113"
-    echo "Start it with: cd /opt/data/hermes-web-computer/backend && ./agent-os server --port 3005 &"
+if ! curl -sf http://localhost:3005/ > /dev/null 2>&1; then
+    echo "ERROR: HWC not running at http://localhost:3005"
+    echo "Start it with: cd /home/sean/.hermes/hermes-web-computer/backend && HERMES_HWC_ROOT=/home/sean/.hermes/hermes-web-computer ./agent-os server --port 3005 &"
     exit 1
 fi
 
@@ -33,7 +33,7 @@ google-chrome-stable \
     --window-size=1440,900 \
     --screenshot="$SCREENS/screenshot-$TIMESTAMP.png" \
     --disable-web-security \
-    http://localhost:3113 2>/dev/null
+    http://localhost:3005 2>/dev/null
 
 if [ -f "$SCREENS/screenshot-$TIMESTAMP.png" ]; then
     SIZE=$(stat -c%s "$SCREENS/screenshot-$TIMESTAMP.png")
@@ -64,7 +64,7 @@ for size in "1280,720" "1920,1080"; do
         --window-size="$size" \
         --screenshot="$SCREENS/screenshot-${W}x${H}-$TIMESTAMP.png" \
         --disable-web-security \
-        http://localhost:3113 2>/dev/null && \
+        http://localhost:3005 2>/dev/null && \
     echo "✓ Captured ${W}x${H}" || echo "✗ Failed ${W}x${H}"
 done
 
@@ -80,7 +80,7 @@ if [ -f "$BASELINES/baseline-default.png" ]; then
         
         if [ "$WIDTH" = "$BASE_W" ] && [ "$HEIGHT" = "$BASE_H" ]; then
             # Same dimensions - pixel diff
-            convert "$SCREETS/screenshot-$TIMESTAMP.png" "$BASELINES/baseline-default.png" \
+            convert "$SCREENS/screenshot-$TIMESTAMP.png" "$BASELINES/baseline-default.png" \
                 -resize 400x225! \
                 -compare -compose src "$SCREENS/diff-$TIMESTAMP.png" 2>/dev/null && \
             echo "✓ Diff saved to diff-$TIMESTAMP.png" || echo "Diff comparison unavailable"

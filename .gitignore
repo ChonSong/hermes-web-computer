@@ -1,14 +1,26 @@
+# Dependencies
 node_modules/
-frontend/dist/
-state/
-telemetry/
-*.exe
-*.test
-state.db
-*.log
-backend/go.sum
-frontend/package-lock.json
+.npm-cache/
+.npx/
+
+# Playwright
+.playwright/
+playwright-report/
+test-results/
+
+# Build artifacts
+agent-os
 backend/agent-os
-test-results/
-test-results/
-backend/.gopath/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Temp files
+*.log
+tmp/

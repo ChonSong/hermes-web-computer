@@ -34,7 +34,10 @@ test.describe('contrast-wcag-aa', () => {
     await page.waitForTimeout(500)
 
     // Use Playwright's snapshot + evaluate without args (Playwright 1.49+ rejects multi-arg evaluate)
+    // Hardcode thresholds inside the evaluate to avoid closure/serialization issues
     const textContrasts = await page.evaluate(() => {
+      const NORMAL_TEXT_RATIO = 4.5
+      const LARGE_TEXT_RATIO = 3.0
       const results: { text: string; pass: boolean; ratio: number }[] = []
 
       function parseColor(c: string): [number, number, number] | null {
@@ -60,7 +63,7 @@ test.describe('contrast-wcag-aa', () => {
         const r = ratio(lum(...fg), lum(...bg))
         const fontSize = parseFloat(style.fontSize)
         const isBold = parseInt(style.fontWeight) >= 700
-        const threshold = (fontSize >= 18 || (fontSize >= 14 && isBold)) ? 3.0 : 4.5
+        const threshold = (fontSize >= 18 || (fontSize >= 14 && isBold)) ? LARGE_TEXT_RATIO : NORMAL_TEXT_RATIO
 
         results.push({ text: text.substring(0, 50), pass: r >= threshold, ratio: Math.round(r * 10) / 10 })
       }
