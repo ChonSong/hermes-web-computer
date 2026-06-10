@@ -239,12 +239,12 @@
   <!-- Menu Bar — top of screen -->
   <MenuBar />
 
-  <!-- Gradient background layer -->
-  <div class="fixed inset-0 -z-20 bg-[#0a0a0f]"></div>
+  <!-- Gradient background layer using CSS variable (themed) -->
+  <div class="fixed inset-0 -z-20" style="background: var(--bg-primary, #0a0a0f);"></div>
 
-  <!-- Subtle animated grain overlay -->
+  <!-- Subtle animated grain overlay (toggle via grain class) -->
   <div
-    class="fixed inset-0 -z-10 opacity-[0.03] pointer-events-none"
+    class="grain-overlay fixed inset-0 -z-10 opacity-[0.03] pointer-events-none"
     style="background-image: url('data:image/svg+xml,%3Csvg viewBox=%220 0 256 256%22 xmlns=%22http://www.w3.org/2000/svg%22%3E%3Cfilter id=%22noise%22%3E%3CfeTurbulence type=%22fractalNoise%22 baseFrequency=%220.9%22 numOctaves=%224%22 stitchTiles=%22stitch%22/%3E%3C/filter%3E%3Crect width=%22100%25%22 height=%22100%25%22 filter=%22url(%23noise)%22/%3E%3C/svg%3E');
            animation: grain 8s steps(10) infinite;"
   ></div>
