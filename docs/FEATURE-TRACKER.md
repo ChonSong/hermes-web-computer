@@ -2,22 +2,11 @@
 
 > Single source of truth for feature status. Update after every commit.
 
-**Last updated:** 2026-06-08
-**Current HEAD:** `a813c4f` (fix: visual QA scripts + E2E test failures)
-**Server:** ✅ Running on host port 3005 (PID 2652195)
+**Last updated:** 2026-06-09
+**Current HEAD:** `8328ad2` (feat(phase6): cost ledger per session + skills usage analytics)
+**Server:** ✅ Running on host port 3005 (HTTP 200)
 **Tunnel:** ⚠️ No Cloudflare tunnel for HWC yet (needs manual setup)
-
----
-
-## Legend
-
-| Symbol | Meaning |
-|--------|---------|
-| ✅ | Complete and merged |
-| 🟡 | In progress (actively being worked) |
-| ⚪ | Not started |
-| ❌ | Blocked / broken |
-| 🔶 | Partially complete (known gaps) |
+**Go tests:** ✅ All passing (6 packages: audio, layout, security, session, ws, agent)
 
 ---
 
@@ -70,8 +59,9 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Chat Panel | ✅ Complete | v1.2 | Hermes Agent SSE streaming |
 | File Manager (Dash) | ✅ Complete | v1.2 | Browse/preview/edit/create/delete |
 | System Status (Dash) | ✅ Complete | v1.3 | Real sysinfo from Phase 9 backend handlers |
-| Analytics (Dash) | ✅ Complete | v1.3 | Real telemetry from Phase 9 analytics.get |
+| Analytics (Dash) | ✅ Complete | v1.4 | Phase 9 telemetry + Phase 6.2 cost ledger + 6.3 skills analytics (Tok/Model/Skills tabs) |
 | Observability (Dash) | ✅ Complete | v1.3 | Real event feed from Phase 9 dashboard.stats |
+| File Upload | ✅ Complete | 2026-06-10 | Standalone dock tile with drag-drop, browse, file grid, progress; also integrated into ChatPanel |
 | Calculator | ⚪ not-started | — | Simple web app tile |
 | Calendar | ⚪ not-started | — | Web app tile |
 | Music Player | ⚪ not-started | — | Spotify integration possible |
@@ -87,12 +77,12 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | PTY Supervisor | `pty/supervisor.go` | ✅ Complete | 1MB ring buffer + checkpoint |
 | Layout Tree | `layout/tree.go` | ✅ Complete | Split/mount/unmount/resize/swap/fullscreen |
 | Security Enforcer | `security/security.go` | ✅ Complete | YAML tiers + token gating |
-| Session Store | `session/store.go` | ✅ Complete | JSON file-based |
-| Browser Manager | `browser/browser.go` | ✅ Complete | chromedp headless |
+| Session Store | `session/store.go` | ✅ Complete | JSON file-based + cost tracking (Phase 6.2) |
+| Browser Manager | `browser/browser.go` | ✅ Complete | chromedp headless, wired to apps.launch + 7 WS route handlers |
 | LLM Router | `llm/router.go` | ✅ Complete | Multi-provider (not yet wired to UI) |
-| MCP Client | `mcp/client.go` | ✅ Complete | JSON-RPC 2.0 stdio |
+| MCP Client | `mcp/client.go` | ✅ Complete | JSON-RPC 2.0 stdio (not yet wired to UI) |
 | Audio Bridge | `audio/bridge.go` | ✅ Complete | Fun-Audio-Chat relay |
-| Telemetry | `telemetry/telemetry.go` | ✅ Complete | JSONL ring buffer + async sync |
+| Telemetry | `telemetry/telemetry.go` | ✅ Complete | JSONL ring buffer at stateDir/telemetry/, syncer configurable via TELEMETRY_ENDPOINT |
 | Config Manager | `config/manager.go` | ✅ Complete | YAML read/write + env vars |
 | Docker Manager | `docker/manager.go` | ✅ Complete | CLI wrapper |
 | Agent Streamer | `agent/streamer.go` | ✅ Complete | SSE client for Hermes |
@@ -106,10 +96,11 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 
 | Component | Plan doc | Status | Last Updated | Notes |
 |-----------|----------|--------|-------------|-------|
-| xpra server setup | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Install on host, HTML5 mode |
-| `xpra/manager.go` | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Go manager for sessions |
-| `XpraTile.svelte` | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Iframe tile component, 413 lines |
-| SSH tunnel support | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Browser → host xpra |
+| xpra server setup script | XPRA-INTEGRATION.md | ✅ Complete | 2026-06-10 | `scripts/setup-xpra.sh` — installs xpra, creates systemd service, starts on :10 with HTML5 on 9453 |
+| `xpra/manager.go` | XPRA-INTEGRATION.md | ✅ Complete (uncommitted) | 2026-05-24 | Go backend package for xpra session lifecycle — StartServer/StopServer/AttachApp/ListWindows/DetachWindow. 342 lines. Code exists on disk but NOT committed. |
+| `xpra/proxy.go` | XPRA-INTEGRATION.md | ✅ Complete (uncommitted) | 2026-05-24 | HTTP reverse proxy + WebSocket proxy (httputil.ReverseProxy + nhooyr/websocket bidirectional relay). 170 lines. Code exists on disk but NOT committed. |
+| `XpraTile.svelte` | XPRA-INTEGRATION.md | ✅ Complete | 2026-05-24 | Iframe tile component, 413 lines (exists on disk, status icon, reconnect logic, window list bar) |
+| Middleware wiring in `ws/multiplexer.go` | XPRA-INTEGRATION.md | ✅ Complete (uncommitted) | 2026-05-24 | `xpra.start`/`xpra.stop`/`xpra.attach`/`xpra.list`/`xpra.detach` WS handlers + proxy routes. Code exists on disk but NOT committed. |
 
 ---
 
@@ -134,7 +125,7 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 | Theme (solid #191919) | ✅ Complete | ΔE<8 vs reference, verified 2026-05-24 |
 | CI pipeline | ✅ Passing | GitHub Actions |
 | Cloudflare tunnel | ✅ Running | hermes-webui tunnel |
-| Port | ⚠️ Wrong | Legacy port 3001/3113 — **HWC runs on 3005** |
+| Port | ✅ Correct | HWC runs on **3005** (all legacy refs fixed) |
 
 ---
 
@@ -142,11 +133,11 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 
 | Job | Schedule | Status | Last Run | Notes |
 |-----|----------|--------|----------|-------|
-| Rebuild + deploy check | every 240m | ⚠️ Paused (error) | 2026-06-05 | Server was down; now running. Needs re-enable + path fix |
-| HWC canary watch | every 360m | ⚠️ Paused (error) | 2026-06-05 | Server was down; now running. Needs re-enable |
-| HWC Visual QA | every 720m | ❌ Error | error | Script port fixed (3113→3005); needs re-enable |
-| Phase Engine | hourly | ❌ Error | error | All phases complete; job can be disabled |
-| Nightly build health | not set | ⚪ not-started | — | `go build + go test + npm run build` → 2am Sydney |
+| Rebuild + deploy check | every 240m | ✅ OK | 2026-06-08 | Re-enabled after server recovery |
+| HWC canary watch | every 360m | ✅ OK | 2026-06-09 | Re-enabled after server recovery |
+| HWC Visual QA | every 720m | ❌ Missing | — | Was removed/never re-created after initial setup |
+| Phase Engine | hourly | ⚪ Disabled | — | All phases complete; no longer needed |
+| Nightly build health | 0 19 * * * | ✅ OK | 2026-06-08 | Running on schedule |
 
 ---
 
@@ -163,11 +154,13 @@ Based on `docs/WAYBAR-SPEC.md` — Hyprland reference screenshot functional spec
 
 ## Next Action
 
-**Priority:** Build Waybar.svelte — top bar with clickable workspace indicators.
+**Priority:** Complete v1.4 — address remaining gaps.
 
-**Prerequisite:** Host metrics endpoint (`GET /api/system/metrics` → CPU/mem/net/temp/audio) for system tray icons.
+**Phase 6 gaps now closed:** Cost ledger (6.2) + Skills analytics (6.3) ✅ delivered.
 
-**Start with:**
-1. Backend: `backend/ws/metrics.go` — expose host system metrics
-2. Frontend: `Waybar.svelte` — workspace pill + system tray container
-3. Integrate into `App.svelte` top slot
+**Remaining for v1.4:**
+1. Context meter / message search (deferred)
+2. Cloudflare tunnel for HWC port 3005 (needs manual setup)
+3. Fresh E2E test run + visual QA baseline screenshots
+
+**Next major phase:** Phase 7 — Multi-user / OIDC auth (MULTI-USER-PLAN.md)

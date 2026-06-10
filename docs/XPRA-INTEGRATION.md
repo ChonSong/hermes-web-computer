@@ -527,19 +527,33 @@ This runs Xpra inside Xvfb (virtual framebuffer), isolating it from the host X11
 
 ## 9. Dependencies & Installation
 
+### Automated Setup (Recommended)
+
+Run the setup script on the EndeavourOS host:
+
 ```bash
-# Install Xpra (Debian/Ubuntu)
-apt install xpra
+cd ~/.hermes/hermes-web-computer/scripts
+bash setup-xpra.sh
+```
+
+This installs xpra from AUR, creates the systemd user service for auto-start,
+and starts the server on display `:10` with HTML5 bridge on port `9453`.
+See the script for additional flags: `bash setup-xpra.sh --help`
+
+### Manual Install (For Reference)
+
+```bash
+# Install Xpra (EndeavourOS / Arch — AUR)
+yay -S xpra
 
 # Verify
-xpra version
-# Xpra v5.0.3
+xpra --version
 
 # Start manual test
-DISPLAY=:99 Xvfb :99 -screen 0 1920x1080x24 &
-xpra start --bind-web=9443 --html=on --start=xterm :10
+xpra start :10 --bind-web=9453 --html=on --start=xterm \
+  --xvfb="Xvfb :10 -screen 0 1920x1080x24 -ac"
 
-# Open browser to http://localhost:9443
+# Open browser to http://localhost:9453
 ```
 
 For Go dependency:
