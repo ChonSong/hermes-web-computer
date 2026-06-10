@@ -24,3 +24,14 @@ Thumbs.db
 # Temp files
 *.log
 tmp/
+
+# Runtime state
+state/
+sessions/
+
+# Build artifacts
+backend/.gopath/
+
+# Workspace-specific files
+home/
+opt/
